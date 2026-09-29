@@ -1,5 +1,9 @@
 import { createMiddleware } from "@tanstack/react-start"
-import { getCookie, setResponseHeader } from "@tanstack/react-start/server"
+import {
+	getCookie,
+	getRequestHeader,
+	setResponseHeader,
+} from "@tanstack/react-start/server"
 import axios from "redaxios"
 
 export const AUTH_API =
@@ -27,7 +31,7 @@ export const store_api = axios.create({
 
 export const authMiddleware = createMiddleware({ type: "function" }).server(
 	async ({ next }) => {
-		const access_token = getCookie("access_token")
+		const cookieHeader = getRequestHeader("cookie")
 		const refresh_token = getCookie("refresh_token")
 
 		const proxyCookies = (backendResponse: Response) => {
@@ -40,15 +44,15 @@ export const authMiddleware = createMiddleware({ type: "function" }).server(
 			options: RequestInit = {},
 		): Promise<Response> => {
 			const headers = new Headers(options.headers)
-			if (access_token) {
-				headers.set("access_token", access_token)
+			if (cookieHeader) {
+				headers.set("cookie", cookieHeader)
 			}
 
 			let response = await fetch(urlPath, { ...options, headers })
 
 			if (response.status === 401 && refresh_token) {
 				try {
-					const refreshResponse = await fetch(AUTH_API + "/users/refresh", {
+					const refreshResponse = await fetch(`${AUTH_API}/users/refresh`, {
 						method: "POST",
 						headers: {
 							Cookie: `refresh_token=${refresh_token}`,

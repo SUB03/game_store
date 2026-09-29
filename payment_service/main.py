@@ -31,6 +31,7 @@ class PaymentServiceServicer(payment_service_pb2_grpc.PaymentServiceServicer):
             yookassa_request = PaymentRequest(
                 amount=Amount(value=request.price, currency="RUB"),
                 description=f"Purchase of app {request.appid} by {request.username}",
+                capture=True,
                 metadata={
                     "username": request.username,
                     "appid": str(request.appid),
