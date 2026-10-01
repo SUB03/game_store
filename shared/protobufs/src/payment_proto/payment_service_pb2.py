@@ -25,23 +25,23 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#payment_proto/payment_service.proto\x1a\x1cgoogle/protobuf/struct.proto\"D\n\x12MakePaymentRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\x12\r\n\x05price\x18\x03 \x01(\t\"C\n\x13MakePaymentResponse\x12\x12\n\npayment_id\x18\x01 \x01(\t\x12\x18\n\x10\x63onfirmation_url\x18\x02 \x01(\t\"b\n\x1aPaymentNotificationRequest\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\r\n\x05\x65vent\x18\x02 \x01(\t\x12\'\n\x06object\x18\x03 \x01(\x0b\x32\x17.google.protobuf.Struct\"=\n\x1bPaymentNotificationResponse\x12\x1e\n\x06status\x18\x01 \x01(\x0e\x32\x0e.PaymentStatus*\x84\x01\n\rPaymentStatus\x12\x1e\n\x1aPAYMENT_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n\x16PAYMENT_STATUS_PENDING\x10\x01\x12\x1c\n\x18PAYMENT_STATUS_SUCCEEDED\x10\x02\x12\x19\n\x15PAYMENT_STATUS_FAILED\x10\x03\x32\x9c\x01\n\x0ePaymentService\x12\x38\n\x0bMakePayment\x12\x13.MakePaymentRequest\x1a\x14.MakePaymentResponse\x12P\n\x13PaymentNotification\x12\x1b.PaymentNotificationRequest\x1a\x1c.PaymentNotificationResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#payment_proto/payment_service.proto\x1a\x1cgoogle/protobuf/struct.proto\"m\n\x12MakePaymentRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\x12\r\n\x05price\x18\x03 \x01(\t\x12\x0e\n\x06\x61ppids\x18\x04 \x03(\x03\x12\x17\n\x0fidempotency_key\x18\x05 \x01(\t\"C\n\x13MakePaymentResponse\x12\x12\n\npayment_id\x18\x01 \x01(\t\x12\x18\n\x10\x63onfirmation_url\x18\x02 \x01(\t\"b\n\x1aPaymentNotificationRequest\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\r\n\x05\x65vent\x18\x02 \x01(\t\x12\'\n\x06object\x18\x03 \x01(\x0b\x32\x17.google.protobuf.Struct\"=\n\x1bPaymentNotificationResponse\x12\x1e\n\x06status\x18\x01 \x01(\x0e\x32\x0e.PaymentStatus*\x84\x01\n\rPaymentStatus\x12\x1e\n\x1aPAYMENT_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n\x16PAYMENT_STATUS_PENDING\x10\x01\x12\x1c\n\x18PAYMENT_STATUS_SUCCEEDED\x10\x02\x12\x19\n\x15PAYMENT_STATUS_FAILED\x10\x03\x32\x9c\x01\n\x0ePaymentService\x12\x38\n\x0bMakePayment\x12\x13.MakePaymentRequest\x1a\x14.MakePaymentResponse\x12P\n\x13PaymentNotification\x12\x1b.PaymentNotificationRequest\x1a\x1c.PaymentNotificationResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'payment_proto.payment_service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_PAYMENTSTATUS']._serialized_start=372
-  _globals['_PAYMENTSTATUS']._serialized_end=504
+  _globals['_PAYMENTSTATUS']._serialized_start=413
+  _globals['_PAYMENTSTATUS']._serialized_end=545
   _globals['_MAKEPAYMENTREQUEST']._serialized_start=69
-  _globals['_MAKEPAYMENTREQUEST']._serialized_end=137
-  _globals['_MAKEPAYMENTRESPONSE']._serialized_start=139
-  _globals['_MAKEPAYMENTRESPONSE']._serialized_end=206
-  _globals['_PAYMENTNOTIFICATIONREQUEST']._serialized_start=208
-  _globals['_PAYMENTNOTIFICATIONREQUEST']._serialized_end=306
-  _globals['_PAYMENTNOTIFICATIONRESPONSE']._serialized_start=308
-  _globals['_PAYMENTNOTIFICATIONRESPONSE']._serialized_end=369
-  _globals['_PAYMENTSERVICE']._serialized_start=507
-  _globals['_PAYMENTSERVICE']._serialized_end=663
+  _globals['_MAKEPAYMENTREQUEST']._serialized_end=178
+  _globals['_MAKEPAYMENTRESPONSE']._serialized_start=180
+  _globals['_MAKEPAYMENTRESPONSE']._serialized_end=247
+  _globals['_PAYMENTNOTIFICATIONREQUEST']._serialized_start=249
+  _globals['_PAYMENTNOTIFICATIONREQUEST']._serialized_end=347
+  _globals['_PAYMENTNOTIFICATIONRESPONSE']._serialized_start=349
+  _globals['_PAYMENTNOTIFICATIONRESPONSE']._serialized_end=410
+  _globals['_PAYMENTSERVICE']._serialized_start=548
+  _globals['_PAYMENTSERVICE']._serialized_end=704
 # @@protoc_insertion_point(module_scope)

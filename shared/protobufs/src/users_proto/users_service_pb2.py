@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fusers_proto/users_service.proto\x12\x08users.v1\"7\n\x14\x41\x64\x64GameToUserRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"&\n\x15\x41\x64\x64GameToUserResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\"1\n\x0eHasGameRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"!\n\x0fHasGameResponse\x12\x0e\n\x06result\x18\x01 \x01(\x08\"(\n\x14GetOwnedGamesRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"\'\n\x15GetOwnedGamesResponse\x12\x0e\n\x06\x61ppids\x18\x01 \x03(\x03\x32\xf1\x01\n\x0bUserService\x12>\n\x07HasGame\x12\x18.users.v1.HasGameRequest\x1a\x19.users.v1.HasGameResponse\x12P\n\rAddGameToUser\x12\x1e.users.v1.AddGameToUserRequest\x1a\x1f.users.v1.AddGameToUserResponse\x12P\n\rGetOwnedGames\x12\x1e.users.v1.GetOwnedGamesRequest\x1a\x1f.users.v1.GetOwnedGamesResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fusers_proto/users_service.proto\x12\x08users.v1\"7\n\x14\x41\x64\x64GameToUserRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"&\n\x15\x41\x64\x64GameToUserResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\"1\n\x0eHasGameRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"!\n\x0fHasGameResponse\x12\x0e\n\x06result\x18\x01 \x01(\x08\"(\n\x14GetOwnedGamesRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"\'\n\x15GetOwnedGamesResponse\x12\x0e\n\x06\x61ppids\x18\x01 \x03(\x03\"7\n\x14\x41\x64\x64GameToCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"5\n\x15\x41\x64\x64GameToCartResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\x12\r\n\x05\x61\x64\x64\x65\x64\x18\x02 \x01(\x08\"<\n\x19RemoveGameFromCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"<\n\x1aRemoveGameFromCartResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\x12\x0f\n\x07removed\x18\x02 \x01(\x08\"\"\n\x0eGetCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"7\n\x0fGetCartResponse\x12\x0e\n\x06\x61ppids\x18\x01 \x03(\x03\x12\x14\n\x0c\x63heckout_key\x18\x02 \x01(\t\"$\n\x10\x43learCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"$\n\x11\x43learCartResponse\x12\x0f\n\x07removed\x18\x01 \x01(\x05\x32\xaa\x04\n\x0bUserService\x12>\n\x07HasGame\x12\x18.users.v1.HasGameRequest\x1a\x19.users.v1.HasGameResponse\x12P\n\rAddGameToUser\x12\x1e.users.v1.AddGameToUserRequest\x1a\x1f.users.v1.AddGameToUserResponse\x12P\n\rGetOwnedGames\x12\x1e.users.v1.GetOwnedGamesRequest\x1a\x1f.users.v1.GetOwnedGamesResponse\x12P\n\rAddGameToCart\x12\x1e.users.v1.AddGameToCartRequest\x1a\x1f.users.v1.AddGameToCartResponse\x12_\n\x12RemoveGameFromCart\x12#.users.v1.RemoveGameFromCartRequest\x1a$.users.v1.RemoveGameFromCartResponse\x12>\n\x07GetCart\x12\x18.users.v1.GetCartRequest\x1a\x19.users.v1.GetCartResponse\x12\x44\n\tClearCart\x12\x1a.users.v1.ClearCartRequest\x1a\x1b.users.v1.ClearCartResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -43,6 +43,22 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETOWNEDGAMESREQUEST']._serialized_end=268
   _globals['_GETOWNEDGAMESRESPONSE']._serialized_start=270
   _globals['_GETOWNEDGAMESRESPONSE']._serialized_end=309
-  _globals['_USERSERVICE']._serialized_start=312
-  _globals['_USERSERVICE']._serialized_end=553
+  _globals['_ADDGAMETOCARTREQUEST']._serialized_start=311
+  _globals['_ADDGAMETOCARTREQUEST']._serialized_end=366
+  _globals['_ADDGAMETOCARTRESPONSE']._serialized_start=368
+  _globals['_ADDGAMETOCARTRESPONSE']._serialized_end=421
+  _globals['_REMOVEGAMEFROMCARTREQUEST']._serialized_start=423
+  _globals['_REMOVEGAMEFROMCARTREQUEST']._serialized_end=483
+  _globals['_REMOVEGAMEFROMCARTRESPONSE']._serialized_start=485
+  _globals['_REMOVEGAMEFROMCARTRESPONSE']._serialized_end=545
+  _globals['_GETCARTREQUEST']._serialized_start=547
+  _globals['_GETCARTREQUEST']._serialized_end=581
+  _globals['_GETCARTRESPONSE']._serialized_start=583
+  _globals['_GETCARTRESPONSE']._serialized_end=638
+  _globals['_CLEARCARTREQUEST']._serialized_start=640
+  _globals['_CLEARCARTREQUEST']._serialized_end=676
+  _globals['_CLEARCARTRESPONSE']._serialized_start=678
+  _globals['_CLEARCARTRESPONSE']._serialized_end=714
+  _globals['_USERSERVICE']._serialized_start=717
+  _globals['_USERSERVICE']._serialized_end=1271
 # @@protoc_insertion_point(module_scope)

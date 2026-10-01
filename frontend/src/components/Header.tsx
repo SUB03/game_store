@@ -1,3 +1,5 @@
+import { cartQueryOptions } from "#/queries/cart"
+import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import ThemeToggle from "./ThemeToggle"
 import { Route } from "#/routes/__root"
@@ -5,6 +7,10 @@ import storeIcon from "#/images/storeIcon.png"
 
 export default function Header() {
 	const user = Route.useRouteContext().user
+	const { data: cart } = useQuery({
+		...cartQueryOptions(),
+		enabled: !!user,
+	})
 
 	return (
 		<header className="bg-(--header-bg) px-4 backdrop-blur-lg">
@@ -34,9 +40,19 @@ export default function Header() {
 
 				<div className="ml-auto flex items-center gap-1.5 sm:gap-4">
 					{user ? (
-						<Link to="/profile" className="header-nav-e">
-							{user.username}
-						</Link>
+						<>
+							<Link to="/cart" className="header-nav-e flex items-center gap-1">
+								CART
+								{cart && cart.length > 0 && (
+									<span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-xs font-bold text-white">
+										{cart.length}
+									</span>
+								)}
+							</Link>
+							<Link to="/profile" className="header-nav-e">
+								{user.username}
+							</Link>
+						</>
 					) : (
 						<Link to="/login" className="header-nav-e">
 							sign in

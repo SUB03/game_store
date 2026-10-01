@@ -1,8 +1,9 @@
 from google.protobuf import struct_pb2 as _struct_pb2
+from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Mapping as _Mapping
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
@@ -19,14 +20,18 @@ PAYMENT_STATUS_SUCCEEDED: PaymentStatus
 PAYMENT_STATUS_FAILED: PaymentStatus
 
 class MakePaymentRequest(_message.Message):
-    __slots__ = ("username", "appid", "price")
+    __slots__ = ("username", "appid", "price", "appids", "idempotency_key")
     USERNAME_FIELD_NUMBER: _ClassVar[int]
     APPID_FIELD_NUMBER: _ClassVar[int]
     PRICE_FIELD_NUMBER: _ClassVar[int]
+    APPIDS_FIELD_NUMBER: _ClassVar[int]
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     username: str
     appid: int
     price: str
-    def __init__(self, username: _Optional[str] = ..., appid: _Optional[int] = ..., price: _Optional[str] = ...) -> None: ...
+    appids: _containers.RepeatedScalarFieldContainer[int]
+    idempotency_key: str
+    def __init__(self, username: _Optional[str] = ..., appid: _Optional[int] = ..., price: _Optional[str] = ..., appids: _Optional[_Iterable[int]] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
 class MakePaymentResponse(_message.Message):
     __slots__ = ("payment_id", "confirmation_url")

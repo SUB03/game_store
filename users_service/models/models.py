@@ -33,3 +33,13 @@ games_ownership = Table(
     Column("username", Text, ForeignKey("auth_users.username"), primary_key=True),
     Column("appid", BigInteger, ForeignKey("store_games.appid"), primary_key=True),
 )
+
+# Every row of one user's cart carries the same backend-generated key; it is
+# handed to YooKassa as the Idempotence-Key at checkout and dies with the cart.
+users_cart = Table(
+    "users_cart",
+    metadata,
+    Column("username", Text, ForeignKey("auth_users.username"), primary_key=True),
+    Column("appid", BigInteger, ForeignKey("store_games.appid"), primary_key=True),
+    Column("checkout_key", Text, nullable=False),
+)

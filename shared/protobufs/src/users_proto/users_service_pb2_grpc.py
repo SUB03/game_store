@@ -49,6 +49,26 @@ class UserServiceStub:
                 request_serializer=users__proto_dot_users__service__pb2.GetOwnedGamesRequest.SerializeToString,
                 response_deserializer=users__proto_dot_users__service__pb2.GetOwnedGamesResponse.FromString,
                 _registered_method=True)
+        self.AddGameToCart = channel.unary_unary(
+                '/users.v1.UserService/AddGameToCart',
+                request_serializer=users__proto_dot_users__service__pb2.AddGameToCartRequest.SerializeToString,
+                response_deserializer=users__proto_dot_users__service__pb2.AddGameToCartResponse.FromString,
+                _registered_method=True)
+        self.RemoveGameFromCart = channel.unary_unary(
+                '/users.v1.UserService/RemoveGameFromCart',
+                request_serializer=users__proto_dot_users__service__pb2.RemoveGameFromCartRequest.SerializeToString,
+                response_deserializer=users__proto_dot_users__service__pb2.RemoveGameFromCartResponse.FromString,
+                _registered_method=True)
+        self.GetCart = channel.unary_unary(
+                '/users.v1.UserService/GetCart',
+                request_serializer=users__proto_dot_users__service__pb2.GetCartRequest.SerializeToString,
+                response_deserializer=users__proto_dot_users__service__pb2.GetCartResponse.FromString,
+                _registered_method=True)
+        self.ClearCart = channel.unary_unary(
+                '/users.v1.UserService/ClearCart',
+                request_serializer=users__proto_dot_users__service__pb2.ClearCartRequest.SerializeToString,
+                response_deserializer=users__proto_dot_users__service__pb2.ClearCartResponse.FromString,
+                _registered_method=True)
 
 
 class UserServiceServicer:
@@ -72,6 +92,30 @@ class UserServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def AddGameToCart(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RemoveGameFromCart(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetCart(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ClearCart(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_UserServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -89,6 +133,26 @@ def add_UserServiceServicer_to_server(servicer, server):
                     servicer.GetOwnedGames,
                     request_deserializer=users__proto_dot_users__service__pb2.GetOwnedGamesRequest.FromString,
                     response_serializer=users__proto_dot_users__service__pb2.GetOwnedGamesResponse.SerializeToString,
+            ),
+            'AddGameToCart': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddGameToCart,
+                    request_deserializer=users__proto_dot_users__service__pb2.AddGameToCartRequest.FromString,
+                    response_serializer=users__proto_dot_users__service__pb2.AddGameToCartResponse.SerializeToString,
+            ),
+            'RemoveGameFromCart': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemoveGameFromCart,
+                    request_deserializer=users__proto_dot_users__service__pb2.RemoveGameFromCartRequest.FromString,
+                    response_serializer=users__proto_dot_users__service__pb2.RemoveGameFromCartResponse.SerializeToString,
+            ),
+            'GetCart': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCart,
+                    request_deserializer=users__proto_dot_users__service__pb2.GetCartRequest.FromString,
+                    response_serializer=users__proto_dot_users__service__pb2.GetCartResponse.SerializeToString,
+            ),
+            'ClearCart': grpc.unary_unary_rpc_method_handler(
+                    servicer.ClearCart,
+                    request_deserializer=users__proto_dot_users__service__pb2.ClearCartRequest.FromString,
+                    response_serializer=users__proto_dot_users__service__pb2.ClearCartResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -172,6 +236,114 @@ class UserService:
             '/users.v1.UserService/GetOwnedGames',
             users__proto_dot_users__service__pb2.GetOwnedGamesRequest.SerializeToString,
             users__proto_dot_users__service__pb2.GetOwnedGamesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AddGameToCart(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/users.v1.UserService/AddGameToCart',
+            users__proto_dot_users__service__pb2.AddGameToCartRequest.SerializeToString,
+            users__proto_dot_users__service__pb2.AddGameToCartResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemoveGameFromCart(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/users.v1.UserService/RemoveGameFromCart',
+            users__proto_dot_users__service__pb2.RemoveGameFromCartRequest.SerializeToString,
+            users__proto_dot_users__service__pb2.RemoveGameFromCartResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCart(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/users.v1.UserService/GetCart',
+            users__proto_dot_users__service__pb2.GetCartRequest.SerializeToString,
+            users__proto_dot_users__service__pb2.GetCartResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ClearCart(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/users.v1.UserService/ClearCart',
+            users__proto_dot_users__service__pb2.ClearCartRequest.SerializeToString,
+            users__proto_dot_users__service__pb2.ClearCartResponse.FromString,
             options,
             channel_credentials,
             insecure,

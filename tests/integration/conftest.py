@@ -27,6 +27,7 @@ DEFAULT_URL = f"postgresql+psycopg://postgres:postgres@127.0.0.1:{PORT}/{DB_NAME
 
 TABLES = [
     "users_game_ownership",
+    "users_cart",
     "auth_token_whitelist",
     "auth_users",
     "store_tags",

@@ -13,6 +13,8 @@ message MakePaymentRequest {
   string username = 1;
   int64 appid = 2;
   string price = 3;
+  repeated int64 appids = 4;
+  string idempotency_key = 5;
 }
 
 message MakePaymentResponse {

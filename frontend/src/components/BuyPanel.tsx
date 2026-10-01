@@ -1,9 +1,13 @@
-import { PurchaseError, usePurchaseGame } from "#/mutations/purchase"
+import { useAddToCart, useAddToLibrary } from "#/mutations/cart"
+import type { CartError } from "#/mutations/cart"
+import { cartQueryOptions } from "#/queries/cart"
 import { ownedGamesQueryOptions } from "#/queries/ownedGames"
 import { Route } from "#/routes/__root"
 import type { Game } from "#/types"
 import { useSuspenseQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { useState } from "react"
+import AddToCartModal from "./AddToCartModal"
 import Price from "./Price"
 
 export default function BuyPanel({ game }: { game: Game }) {
@@ -42,10 +46,15 @@ function SignInToBuy({ game }: { game: Game }) {
 
 function PurchaseControls({ game }: { game: Game }) {
 	const { data: ownedGames } = useSuspenseQuery(ownedGamesQueryOptions())
-	const purchase = usePurchaseGame()
+	const { data: cart } = useSuspenseQuery(cartQueryOptions())
+	const addToCart = useAddToCart()
+	const addToLibrary = useAddToLibrary()
+	const [showCartModal, setShowCartModal] = useState(false)
 
 	const owned = ownedGames.some((g) => g.appid === game.appid)
+	const inCart = cart.some((g) => g.appid === game.appid)
 	const isFree = game.price <= 0
+	const addError: CartError | null = addToCart.error ?? addToLibrary.error
 
 	return (
 		<div className="glass-panel shadow_item flex flex-wrap items-center justify-between gap-4 p-4">
@@ -58,39 +67,62 @@ function PurchaseControls({ game }: { game: Game }) {
 					>
 						In your library
 					</Link>
+				) : isFree ? (
+					<button
+						type="button"
+						disabled={addToLibrary.isPending}
+						onClick={() => addToLibrary.mutate(game.appid)}
+						className="rounded-xs px-6 py-3 font-medium text-gray-100 blue-button disabled:opacity-60"
+					>
+						{addToLibrary.isPending ? "Adding…" : "Add to library"}
+					</button>
+				) : inCart ? (
+					<Link
+						to="/cart"
+						className="rounded-xs border border-(--chip-line) px-6 py-3 font-semibold text-(--sea-ink)"
+					>
+						In cart
+					</Link>
 				) : (
 					<button
 						type="button"
-						disabled={purchase.isPending}
-						onClick={() => purchase.mutate(game.appid)}
+						disabled={addToCart.isPending}
+						onClick={async () => {
+							try {
+								// resolves only after the ["cart"] invalidation
+								// finished, so the modal lists the fresh cart
+								await addToCart.mutateAsync(game.appid)
+								setShowCartModal(true)
+							} catch {
+								// CartError is rendered below
+							}
+						}}
 						className="rounded-xs px-6 py-3 font-medium text-gray-100 blue-button disabled:opacity-60"
 					>
-						{purchase.isPending
-							? "Processing…"
-							: isFree
-								? "Add to library"
-								: "Buy now"}
+						{addToCart.isPending ? "Adding…" : "Add to cart"}
 					</button>
 				)}
-				{purchase.error && !owned && (
+				{addError && !owned && (
 					<p className="rounded-md bg-red-50 px-3 py-2 text-end text-sm text-red-700">
-						{purchase.error.message}
-						{purchase.error instanceof PurchaseError &&
-							purchase.error.status === 401 && (
-								<>
-									{" "}
-									<Link
-										to="/login"
-										search={{ redirect: gamePath(game) }}
-										className="underline"
-									>
-										Sign in
-									</Link>
-								</>
-							)}
+						{addError.message}
+						{addError.status === 401 && (
+							<>
+								{" "}
+								<Link
+									to="/login"
+									search={{ redirect: gamePath(game) }}
+									className="underline"
+								>
+									Sign in
+								</Link>
+							</>
+						)}
 					</p>
 				)}
 			</div>
+			{showCartModal && (
+				<AddToCartModal games={cart} onClose={() => setShowCartModal(false)} />
+			)}
 		</div>
 	)
 }

@@ -7,8 +7,19 @@ from sqlalchemy import select, func
 from store_service.schemas.games import Price
 from store_service.engine import engine
 from store_service.models.models import games_table, tags_table
-from store_service.routers.store_utils import get_price, has_game, make_payment, add_game, get_owned_games
-from store_service.schemas.games import PurchaseGame
+from store_service.routers.store_utils import (
+    get_price,
+    has_game,
+    make_payment,
+    add_game,
+    get_owned_games,
+    add_game_to_cart,
+    remove_game_from_cart,
+    get_user_cart,
+    clear_user_cart,
+    make_payment_cart,
+)
+from store_service.schemas.games import PurchaseGame, CartItem, LibraryGame
 from store_service.utils.jwt import decode_jwt
 from store_service.schemas.token import Token
 from store_service.utils.tag_groups import _TAG_TO_GROUP, TAG_GROUPS
@@ -19,6 +30,22 @@ router = routing.APIRouter(
     prefix="/store",
     tags=["store"]
 )
+
+def _claims_or_401(access_token: str | None) -> Token:
+    """Validate the access_token cookie exactly like purchase_game does."""
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="could not validate credentials",
+        )
+    return Token(**decode_jwt(access_token))
+
+def _check_csrf(claims: Token, csrf: str | None) -> None:
+    if not csrf or csrf != str(claims.jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="could not validate credentials",
+        )
 
 @router.get("/tags")
 async def get_tags(
@@ -162,6 +189,202 @@ async def owned_games(access_token: Annotated[str | None, Cookie()] = None):
     return {"results": rows}
 
 
+@router.get("/cart")
+async def get_cart(access_token: Annotated[str | None, Cookie()] = None):
+    claims = _claims_or_401(access_token)
+
+    appids, _ = await get_user_cart(username=claims.sub)
+    if not appids:
+        return {"results": []}
+
+    # Never show games the user already owns or free games (those go
+    # straight to the library, they must never sit in a cart).
+    owned = set(await get_owned_games(username=claims.sub))
+    payable = [appid for appid in appids if appid not in owned]
+    if not payable:
+        return {"results": []}
+
+    stmt = (
+        select(games_table, func.array_agg(tags_table.c.tags).label("tags"))
+        .join(tags_table, tags_table.c.appid == games_table.c.appid, isouter=True)
+        .where(
+            games_table.c.appid.in_(payable),
+            games_table.c.price > 0,
+        )
+        .group_by(games_table.c.appid)
+        .order_by(games_table.c.name)
+    )
+
+    async with engine.begin() as conn:
+        result = await conn.execute(stmt)
+        rows = result.mappings().all()
+
+    return {"results": rows}
+
+
+@router.post("/cart")
+async def add_to_cart(
+    cart_item: CartItem,
+    csrf: Annotated[str | None, Header(alias="CSRF")] = None,
+    access_token: Annotated[str | None, Cookie()] = None,
+):
+    claims = _claims_or_401(access_token)
+    _check_csrf(claims, csrf)
+
+    game_price = await get_price(cart_item.appid)
+    if not game_price:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="appid is not found",
+        )
+    price = Price(**game_price._asdict())
+    if price.price <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="free games are added to the library directly",
+        )
+    if await has_game(username=claims.sub, appid=cart_item.appid):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="already owned by the user",
+        )
+
+    return await add_game_to_cart(username=claims.sub, appid=cart_item.appid)
+
+
+@router.post("/library")
+async def add_to_library(
+    library_game: LibraryGame,
+    csrf: Annotated[str | None, Header(alias="CSRF")] = None,
+    access_token: Annotated[str | None, Cookie()] = None,
+):
+    claims = _claims_or_401(access_token)
+    _check_csrf(claims, csrf)
+
+    game_price = await get_price(library_game.appid)
+    if not game_price:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="appid is not found",
+        )
+    price = Price(**game_price._asdict())
+    if price.price > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="paid games must be added to the cart",
+        )
+
+    if await has_game(username=claims.sub, appid=library_game.appid):
+        return {"appid": library_game.appid, "added": False}
+
+    result = await add_game(username=claims.sub, appid=library_game.appid)
+    return {"appid": result.get("appid", library_game.appid), "added": True}
+
+
+@router.delete("/cart/{appid}")
+async def remove_from_cart(
+    appid: Annotated[int, Path(title="appid to remove from the cart")],
+    csrf: Annotated[str | None, Header(alias="CSRF")] = None,
+    access_token: Annotated[str | None, Cookie()] = None,
+):
+    claims = _claims_or_401(access_token)
+    _check_csrf(claims, csrf)
+
+    return await remove_game_from_cart(username=claims.sub, appid=appid)
+
+
+@router.delete("/cart")
+async def clear_cart(
+    csrf: Annotated[str | None, Header(alias="CSRF")] = None,
+    access_token: Annotated[str | None, Cookie()] = None,
+):
+    claims = _claims_or_401(access_token)
+    _check_csrf(claims, csrf)
+
+    removed = await clear_user_cart(username=claims.sub)
+    return {"removed": removed}
+
+
+@router.post("/checkout")
+async def checkout(
+    csrf: Annotated[str | None, Header(alias="CSRF")] = None,
+    access_token: Annotated[str | None, Cookie()] = None,
+):
+    """Start one payment covering every paid game currently in the cart.
+
+    The cart's backend-generated checkout_key travels along as the payment's
+    idempotency key, so retried checkouts can never create a second charge.
+    Rows are only emptied once the games are granted (webhook / free branch);
+    a failed payment leaves the cart untouched.
+    """
+    claims = _claims_or_401(access_token)
+    _check_csrf(claims, csrf)
+
+    appids, checkout_key = await get_user_cart(username=claims.sub)
+    if not appids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="cart is empty",
+        )
+
+    owned = set(await get_owned_games(username=claims.sub))
+    payable = []
+    for appid in appids:
+        if appid in owned:
+            # Leftover rows can never be paid twice - strip them now.
+            await remove_game_from_cart(username=claims.sub, appid=appid)
+        else:
+            payable.append(appid)
+    if not payable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="cart is empty",
+        )
+
+    stmt = select(
+        games_table.c.appid, games_table.c.price
+    ).where(games_table.c.appid.in_(payable))
+    async with engine.begin() as conn:
+        result = await conn.execute(stmt)
+        prices = {row.appid: row.price for row in result.fetchall()}
+
+    to_pay: list[int] = []
+    granted: list[int] = []
+    total = 0.0
+    for appid in payable:
+        if appid not in prices:
+            # game vanished from the catalog
+            await remove_game_from_cart(username=claims.sub, appid=appid)
+            continue
+        if float(prices[appid]) <= 0:
+            # free games never sit in a cart - grant and drop immediately
+            await add_game(username=claims.sub, appid=appid)
+            await remove_game_from_cart(username=claims.sub, appid=appid)
+            granted.append(appid)
+            continue
+        to_pay.append(appid)
+        total += float(prices[appid])
+
+    if not to_pay:
+        if not granted:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="cart is empty",
+            )
+        return {"message": "added the games", "appids": granted}
+
+    response = await make_payment_cart(
+        username=claims.sub,
+        appids=to_pay,
+        price=f"{total:.2f}",
+        checkout_key=checkout_key,
+    )
+    return {
+        "payment_id": response.payment_id,
+        "confirmation_url": response.confirmation_url,
+    }
+
+
 @router.post("/purchase_game")
 async def purchase_game(
     purchase: PurchaseGame,
@@ -247,59 +470,82 @@ async def notifications(request: Request):
     metadata = obj.get("metadata") if isinstance(obj, dict) else None
     metadata = metadata if isinstance(metadata, dict) else {}
     username = metadata.get("username")
-    appid = metadata.get("appid")
+    raw_appids = metadata.get("appids")
 
-    if not username or appid is None:
+    # Cart payments carry every covered game as "appids" ("1,2,3");
+    # legacy single-game payments only carry "appid".
+    appids: list[int] = []
+    if raw_appids:
+        try:
+            appids = [int(part) for part in str(raw_appids).split(",") if part.strip()]
+        except (TypeError, ValueError):
+            appids = []
+
+    if not appids:
+        raw_appid = metadata.get("appid")
+        try:
+            appids = [int(raw_appid)] if raw_appid is not None else []
+        except (TypeError, ValueError):
+            appids = []
+
+    if not username or not appids:
         logger.warning(
             "Succeeded payment ignored: username or appid metadata is missing",
-            extra={**log_context, "username": username, "appid": appid},
+            extra={
+                **log_context,
+                "username": username,
+                "raw_appids": repr(raw_appids)[:200],
+            },
         )
         return {"status": "OK"}
 
-    try:
-        appid = int(appid)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Succeeded payment ignored: appid metadata is not an integer",
-            extra={**log_context, "username": username, "raw_appid": repr(appid)[:200]},
-        )
-        return {"status": "OK"}
+    for appid in appids:
+        ownership_context = {**log_context, "username": username, "appid": appid}
+        logger.info("Checking ownership for succeeded payment", extra=ownership_context)
+        try:
+            already_owned = await has_game(username=username, appid=appid)
+        except Exception as exc:
+            logger.exception(
+                "Failed to check ownership for succeeded payment",
+                extra={**ownership_context, "error_type": type(exc).__name__},
+            )
+            raise
 
-    ownership_context = {**log_context, "username": username, "appid": appid}
-    logger.info(
-        "Checking ownership for succeeded payment",
-        extra=ownership_context,
-    )
-    try:
-        already_owned = await has_game(username=username, appid=appid)
-    except Exception as exc:
-        logger.exception(
-            "Failed to check ownership for succeeded payment",
-            extra={**ownership_context, "error_type": type(exc).__name__},
-        )
-        raise
+        if already_owned:
+            logger.info(
+                "Game is already owned; skipping grant for succeeded payment",
+                extra={**ownership_context, "already_owned": True},
+            )
+            continue
 
-    if already_owned:
+        try:
+            result = await add_game(username=username, appid=appid)
+        except Exception as exc:
+            logger.exception(
+                "Failed to add game for succeeded payment",
+                extra={**ownership_context, "error_type": type(exc).__name__},
+            )
+            raise
+
         logger.info(
-            "Game is already owned; skipping grant for succeeded payment",
-            extra={**ownership_context, "already_owned": True},
+            "Successfully added game for succeeded payment",
+            extra={
+                **ownership_context,
+                "result_appid": result.get("appid") if isinstance(result, dict) else None,
+            },
         )
-        return {"status": "OK"}
 
-    try:
-        result = await add_game(username=username, appid=appid)
-    except Exception as exc:
-        logger.exception(
-            "Failed to add game for succeeded payment",
-            extra={**ownership_context, "error_type": type(exc).__name__},
-        )
-        raise
+    # Strip every paid game from the cart (best effort): the buyer owns it
+    # now, and GET /store/cart filters owned games anyway as a safety net.
+    # Failures must never fail the webhook - YooKassa would retry forever.
+    for appid in appids:
+        try:
+            await remove_game_from_cart(username=username, appid=appid)
+        except Exception:
+            logger.warning(
+                "Failed to remove purchased game from cart",
+                extra={**log_context, "username": username, "appid": appid},
+                exc_info=True,
+            )
 
-    logger.info(
-        "Successfully added game for succeeded payment",
-        extra={
-            **ownership_context,
-            "result_appid": result.get("appid") if isinstance(result, dict) else None,
-        },
-    )
     return {"status": "OK"}
