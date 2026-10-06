@@ -1,91 +1,83 @@
-import uuid
+import atexit, time, yaml
+import logging
+import logging.config
+import logging.handlers
+from contextlib import asynccontextmanager
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from payment_service.engine import engine
+from payment_service.router import router
 
-import grpc, asyncio
-import payment_proto.payment_service_pb2 as payment_service_pb2
-import payment_proto.payment_service_pb2_grpc as payment_service_pb2_grpc
+from typing import Awaitable, Callable
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
-from async_yookassa import YooKassaClient
-from async_yookassa.models.payment import PaymentRequest, Amount, RedirectConfirmationRequest
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    setup_logging()
+    logger.info("payment_service has started")
+    yield
+    logger.info("payment_service has stopped")
+    await engine.dispose()
 
-class Settings(BaseSettings):
-    shopid: str
-    ukass_api_key: str = Field(alias="UKASS_API_KEY")
-    frontend_url: str = Field(alias="FRONTEND_URL")
-    model_config = SettingsConfigDict(extra="ignore", env_file=".env")
+def setup_logging():
+    with open("payment_service/logger_config.yml") as f:
+        config = yaml.safe_load(f)
+    logging.config.dictConfig(config)
+    queue_handler: logging.handlers.QueueHandler | None = logging.getHandlerByName("queue_handler")
+    if queue_handler is not None:
+        queue_handler.listener.start()
+        atexit.register(queue_handler.listener.stop)
 
-class PaymentServiceServicer(payment_service_pb2_grpc.PaymentServiceServicer):
-    def __init__(self, settings: Settings):
-        self.settings = settings
+REQUEST_COUNT = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status"]
+)
 
-    async def MakePayment(
-            self,
-            request: payment_service_pb2.MakePaymentRequest,
-            context: grpc.aio.ServicerContext
-    ) -> payment_service_pb2.MakePaymentResponse:
-        # Cart checkout fills appids (+ the cart's idempotency key); the
-        # legacy single-game purchase only fills appid.
-        appids = list(request.appids) or [request.appid]
-        if len(appids) > 1:
-            description = f"Purchase of {len(appids)} games by {request.username}"
-            return_url = f"{self.settings.frontend_url}/profile"
-        else:
-            description = f"Purchase of app {appids[0]} by {request.username}"
-            return_url = f"{self.settings.frontend_url}/app/{appids[0]}"
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds",
+    "Request latency",
+    ["endpoint"]
+)
 
-        # The webhook reads these to grant ownership of every paid game.
-        metadata = {
-            "username": request.username,
-            "appid": str(appids[0]),
-            "appids": ",".join(str(appid) for appid in appids),
-        }
+logger = logging.getLogger("payment_service")
 
-        idempotency_key = None
-        if request.idempotency_key:
-            try:
-                idempotency_key = uuid.UUID(request.idempotency_key)
-            except ValueError:
-                # Never fail a payment over a malformed key; the library
-                # generates a fresh random one when None is passed.
-                idempotency_key = None
+api = FastAPI(lifespan=lifespan)
+api.include_router(router)
 
-        async with YooKassaClient(
-            account_id=self.settings.shopid,
-            secret_key=self.settings.ukass_api_key
-        ) as client:
-            yookassa_request = PaymentRequest(
-                amount=Amount(value=request.price, currency="RUB"),
-                description=description,
-                capture=True,
-                metadata=metadata,
-                confirmation=RedirectConfirmationRequest(
-                    type="redirect",
-                    return_url=return_url
-                )
-            )
+origins = [
+    "http://localhost",
+    "http://localhost:3001",
+]
 
-            payment = await client.payment.create(
-                yookassa_request, idempotency_key=idempotency_key
-            )
-            
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-        return payment_service_pb2.MakePaymentResponse(
-            payment_id=payment.id,
-            confirmation_url=payment.confirmation.confirmation_url
-        )
+@api.middleware("http")
+async def metrics_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]):
+    start = time.time()
+    response = await call_next(request)
+    duration = time.time() - start
 
+    REQUEST_COUNT.labels(
+        request.method,
+        request.url.path,
+        response.status_code
+    ).inc()
 
-async def serve():
-    settings = Settings()
+    REQUEST_LATENCY.labels(request.url.path).observe(duration)
+    return response
 
-    server = grpc.aio.server()
-    payment_service_pb2_grpc.add_PaymentServiceServicer_to_server(PaymentServiceServicer(settings), server)
-    server.add_insecure_port('[::]:8002')
+@api.get('/')
+async def index():
+    return {"message": "payment service index"}
 
-    await server.start()
-    await server.wait_for_termination()
-
-if __name__ == "__main__":
-    asyncio.run(serve())
+@api.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

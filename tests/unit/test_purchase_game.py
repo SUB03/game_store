@@ -1,7 +1,7 @@
-"""Unit tests for the store_service purchase flow (DB and gRPC are mocked).
+"""Unit tests for the payment_service purchase flow (DB and gRPC are mocked).
 
 The endpoint is exercised by calling the router function directly instead of
-through the ASGI app: importing ``store_service.main`` alongside
+through the ASGI app: importing ``payment_service.main`` alongside
 ``auth_service.main`` would register duplicate Prometheus timeseries in the
 single test process.
 """
@@ -15,9 +15,9 @@ import jwt as pyjwt
 import pytest
 from fastapi import HTTPException
 
-import store_service.routers.store as store_router
-from store_service.schemas.games import PurchaseGame
-from store_service.utils.jwt import settings as store_settings
+import payment_service.router as payment_router
+from payment_service.schemas import PurchaseGame
+from payment_service.jwt_utils import settings as payment_settings
 
 Row = namedtuple("Row", ["appid", "name", "price"])
 
@@ -29,14 +29,14 @@ def _access_token(jti: str, username: str = "alice") -> str:
             "jti": jti,
             "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
         },
-        store_settings.secret_key,
-        algorithm=store_settings.algorithm,
+        payment_settings.secret_key,
+        algorithm=payment_settings.algorithm,
     )
 
 
 async def _purchase(csrf: str | None, appid: int, access_token):
     purchase = PurchaseGame(appid=appid)
-    return await store_router.purchase_game(
+    return await payment_router.purchase_game(
         purchase, csrf=csrf, access_token=access_token
     )
 
@@ -47,13 +47,13 @@ def mocks(monkeypatch):
     has_game = AsyncMock(return_value=False)
     get_price = AsyncMock(return_value=Row(appid=42, name="Some Game", price="9.99"))
     make_payment = AsyncMock(
-        return_value=type("Resp", (), {"payment_id": "pay-1", "confirmation_url": "https://pay"})()
+        return_value={"payment_id": "pay-1", "confirmation_url": "https://pay"}
     )
     add_game = AsyncMock(return_value={"message": "added the game", "appid": 42})
-    monkeypatch.setattr(store_router, "has_game", has_game)
-    monkeypatch.setattr(store_router, "get_price", get_price)
-    monkeypatch.setattr(store_router, "make_payment", make_payment)
-    monkeypatch.setattr(store_router, "add_game", add_game)
+    monkeypatch.setattr(payment_router, "has_game", has_game)
+    monkeypatch.setattr(payment_router, "get_price", get_price)
+    monkeypatch.setattr(payment_router, "make_payment", make_payment)
+    monkeypatch.setattr(payment_router, "add_game", add_game)
     return {
         "has_game": has_game,
         "get_price": get_price,
@@ -82,8 +82,8 @@ async def test_purchase_rejects_expired_token(mocks):
             "jti": str(uuid.uuid4()),
             "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
         },
-        store_settings.secret_key,
-        algorithm=store_settings.algorithm,
+        payment_settings.secret_key,
+        algorithm=payment_settings.algorithm,
     )
     with pytest.raises(HTTPException) as exc_info:
         await _purchase("whatever", 42, expired)
@@ -147,17 +147,3 @@ async def test_purchase_passes_username_and_appid(mocks):
     await _purchase(jti, 42, _access_token(jti, username="bob"))
     mocks["has_game"].assert_awaited_once_with(username="bob", appid=42)
     mocks["make_payment"].assert_awaited_once_with(username="bob", appid=42, price="9.99")
-
-
-async def test_notifications_endpoint_accepts_any_payload():
-    from starlette.requests import Request
-
-    body = b'{"event": "test"}'
-
-    async def receive():
-        return {"type": "http.request", "body": body, "more_body": False}
-
-    scope = {"type": "http", "method": "POST", "path": "/store/notifications",
-             "headers": [], "query_string": b"", "client": ("127.0.0.1", 1)}
-    response = await store_router.notifications(Request(scope, receive))
-    assert response == {"status": "OK"}

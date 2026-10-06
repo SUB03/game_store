@@ -1,7 +1,7 @@
 """Integration tests for the cart against real PostgreSQL.
 
 Covers the users_service servicer RPCs (storage semantics, checkout_key
-lifecycle) and the store_service GET /store/cart SQL (owned/free filtering).
+lifecycle) and the payment_service GET /payment/cart SQL (owned/free filtering).
 """
 
 import uuid
@@ -17,8 +17,8 @@ from users_proto.users_service_pb2 import (
     RemoveGameFromCartRequest,
 )
 
-import store_service.routers.store as store_router
-from store_service.utils.jwt import settings as store_settings
+import payment_service.router as payment_router
+from payment_service.jwt_utils import settings as payment_settings
 from users_service.main import Settings, UsersServiceServicer
 
 
@@ -39,8 +39,8 @@ def _token(username: str) -> str:
             "jti": str(uuid.uuid4()),
             "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
         },
-        store_settings.secret_key,
-        algorithm=store_settings.algorithm,
+        payment_settings.secret_key,
+        algorithm=payment_settings.algorithm,
     )
 
 
@@ -168,7 +168,7 @@ async def test_cart_requires_existing_user_and_game(
         )
 
 
-# --- store_service GET /store/cart against the real database ------------------
+# --- payment_service GET /payment/cart against the real database --------------
 
 
 async def test_get_cart_returns_paid_unowned_games_only(
@@ -187,10 +187,10 @@ async def test_get_cart_returns_paid_unowned_games_only(
         assert username == "alice"
         return [owned]
 
-    monkeypatch.setattr(store_router, "get_user_cart", fake_get_user_cart)
-    monkeypatch.setattr(store_router, "get_owned_games", fake_get_owned_games)
+    monkeypatch.setattr(payment_router, "get_user_cart", fake_get_user_cart)
+    monkeypatch.setattr(payment_router, "get_owned_games", fake_get_owned_games)
 
-    result = await store_router.get_cart(access_token=_token("alice"))
+    result = await payment_router.get_cart(access_token=_token("alice"))
 
     appids = [row["appid"] for row in result["results"]]
     # owned and free games never show up in a cart
@@ -201,14 +201,14 @@ async def test_get_cart_with_empty_cart_hits_no_database(monkeypatch):
     async def fake_get_user_cart(username):
         return [], ""
 
-    monkeypatch.setattr(store_router, "get_user_cart", fake_get_user_cart)
+    monkeypatch.setattr(payment_router, "get_user_cart", fake_get_user_cart)
 
-    original = store_router.engine
+    original = payment_router.engine
     sentinel = object()
-    store_router.engine = sentinel
+    payment_router.engine = sentinel
     try:
-        result = await store_router.get_cart(access_token=_token("alice"))
+        result = await payment_router.get_cart(access_token=_token("alice"))
     finally:
-        store_router.engine = original
+        payment_router.engine = original
 
     assert result == {"results": []}

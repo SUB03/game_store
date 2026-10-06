@@ -1,7 +1,7 @@
-"""Unit tests for the store cart / library / checkout endpoints (DB and gRPC mocked).
+"""Unit tests for the payment cart / library / checkout endpoints (DB and gRPC mocked).
 
 The endpoints are exercised by calling the router functions directly instead of
-through the ASGI app: importing store_service.main alongside auth_service.main
+through the ASGI app: importing payment_service.main alongside auth_service.main
 would register duplicate Prometheus timeseries in the single test process.
 """
 
@@ -16,9 +16,9 @@ import jwt as pyjwt
 import pytest
 from fastapi import HTTPException
 
-import store_service.routers.store as store_router
-from store_service.schemas.games import CartItem, LibraryGame
-from store_service.utils.jwt import settings as store_settings
+import payment_service.router as payment_router
+from payment_service.schemas import CartItem, LibraryGame
+from payment_service.jwt_utils import settings as payment_settings
 
 PriceRow = namedtuple("PriceRow", ["appid", "name", "price"])
 
@@ -30,8 +30,8 @@ def _access_token(jti: str, username: str = "alice") -> str:
             "jti": jti,
             "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
         },
-        store_settings.secret_key,
-        algorithm=store_settings.algorithm,
+        payment_settings.secret_key,
+        algorithm=payment_settings.algorithm,
     )
 
 
@@ -69,11 +69,11 @@ class _FakeEngine:
 
 @pytest.fixture
 def fake_engine():
-    original = store_router.engine
+    original = payment_router.engine
     engine = _FakeEngine()
-    store_router.engine = engine
+    payment_router.engine = engine
     yield engine
-    store_router.engine = original
+    payment_router.engine = original
 
 
 @pytest.fixture
@@ -91,9 +91,7 @@ def mocks(monkeypatch):
     get_user_cart = AsyncMock(return_value=([], ""))
     clear_user_cart = AsyncMock(return_value=0)
     make_payment_cart = AsyncMock(
-        return_value=SimpleNamespace(
-            payment_id="pay-1", confirmation_url="https://pay"
-        )
+        return_value={"payment_id": "pay-1", "confirmation_url": "https://pay"}
     )
     get_owned_games = AsyncMock(return_value=[])
     replacements = {
@@ -108,12 +106,12 @@ def mocks(monkeypatch):
         "get_owned_games": get_owned_games,
     }
     for name, mock in replacements.items():
-        monkeypatch.setattr(store_router, name, mock)
+        monkeypatch.setattr(payment_router, name, mock)
     return replacements
 
 
 async def _get_cart(access_token):
-    return await store_router.get_cart(access_token=access_token)
+    return await payment_router.get_cart(access_token=access_token)
 
 
 # --- GET /store/cart ----------------------------------------------------------
@@ -140,8 +138,8 @@ async def test_get_cart_rejects_expired_token(mocks):
             "jti": str(uuid.uuid4()),
             "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
         },
-        store_settings.secret_key,
-        algorithm=store_settings.algorithm,
+        payment_settings.secret_key,
+        algorithm=payment_settings.algorithm,
     )
     with pytest.raises(HTTPException) as exc_info:
         await _get_cart(expired)
@@ -180,7 +178,7 @@ async def test_get_cart_returns_joined_game_rows(mocks, fake_engine):
 
 
 async def _add_to_cart(csrf, appid, access_token):
-    return await store_router.add_to_cart(
+    return await payment_router.add_to_cart(
         CartItem(appid=appid), csrf=csrf, access_token=access_token
     )
 
@@ -259,7 +257,7 @@ async def test_add_to_cart_is_idempotent_passthrough(mocks):
 
 
 async def _add_to_library(csrf, appid, access_token):
-    return await store_router.add_to_library(
+    return await payment_router.add_to_library(
         LibraryGame(appid=appid), csrf=csrf, access_token=access_token
     )
 
@@ -317,13 +315,13 @@ async def test_add_to_library_is_idempotent_for_owned_game(mocks):
 
 
 async def _remove_from_cart(csrf, appid, access_token):
-    return await store_router.remove_from_cart(
+    return await payment_router.remove_from_cart(
         appid=appid, csrf=csrf, access_token=access_token
     )
 
 
 async def _clear_cart(csrf, access_token):
-    return await store_router.clear_cart(csrf=csrf, access_token=access_token)
+    return await payment_router.clear_cart(csrf=csrf, access_token=access_token)
 
 
 # --- DELETE /store/cart -------------------------------------------------------
@@ -371,7 +369,7 @@ async def test_clear_cart_returns_removed_count(mocks):
 
 
 async def _checkout(csrf, access_token):
-    return await store_router.checkout(csrf=csrf, access_token=access_token)
+    return await payment_router.checkout(csrf=csrf, access_token=access_token)
 
 
 # --- POST /store/checkout -----------------------------------------------------

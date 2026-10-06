@@ -1,5 +1,5 @@
 import type { Game } from "#/types"
-import { authMiddleware, STORE_API } from "#/utils/api"
+import { authMiddleware, PAYMENT_API } from "#/utils/api"
 import { queryOptions } from "@tanstack/react-query"
 import { createServerFn } from "@tanstack/react-start"
 
@@ -11,7 +11,7 @@ export const fetchCart = createServerFn({ method: "GET" })
 	.middleware([authMiddleware])
 	.handler(async ({ context }): Promise<Game[]> => {
 		try {
-			const response = await context.api(`${STORE_API}/store/cart`)
+			const response = await context.api(`${PAYMENT_API}/payment/cart`)
 			if (!response.ok) {
 				throw new Error("Failed to fetch your cart")
 			}

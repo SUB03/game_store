@@ -49,7 +49,7 @@ function RouteComponent() {
 	}
 
 	return (
-		<main className="page-wrap min-h-175 px-4 pb-8">
+		<main className="page-wrap min-h-175 px-4 pb-8 max-w-6xl mx-auto">
 			<div className="flex flex-wrap items-center justify-between gap-4 py-6">
 				<h1 className="text-2xl font-semibold text-(--sea-ink)">YOUR CART</h1>
 				<Link

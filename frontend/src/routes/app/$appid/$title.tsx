@@ -35,7 +35,7 @@ function RouteComponent() {
 	}
 
 	return (
-		<main className="page-wrap flex flex-col gap-4 px-4 pb-8">
+		<main className="page-wrap flex flex-col gap-4 px-4 pb-8 max-w-6xl mx-auto">
 			<img src={game.header_image} alt={game.name} />
 			<BuyPanel game={game} />
 			<div>{game.detailed_description}</div>

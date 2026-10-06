@@ -1,5 +1,5 @@
 import type { ApiResult } from "#/utils/api"
-import { authMiddleware, callStore } from "#/utils/api"
+import { authMiddleware, callPayment } from "#/utils/api"
 import { createServerFn } from "@tanstack/react-start"
 import z from "zod"
 
@@ -23,7 +23,7 @@ export const purchaseGame = createServerFn({ method: "POST" })
 	.validator(appidInput)
 	.handler(
 		async ({ data, context }): Promise<ApiResult<PurchaseResponse>> =>
-			callStore<PurchaseResponse>(context, "/store/purchase_game", {
+			callPayment<PurchaseResponse>(context, "/payment/purchase_game", {
 				method: "POST",
 				body: JSON.stringify(data),
 			}),

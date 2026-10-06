@@ -9,6 +9,8 @@ import axios from "redaxios"
 export const AUTH_API = process.env.AUTH_SERVICE_URL ?? "http://localhost:8000"
 export const STORE_API =
 	process.env.STORE_SERVICE_URL ?? "http://localhost:8001"
+export const PAYMENT_API =
+	process.env.PAYMENT_SERVICE_URL ?? "http://localhost:8002"
 
 /** Result of a server function: either the payload or the backend's error. */
 export type ApiResult<T> =
@@ -90,6 +92,41 @@ export async function callStore<T>(
 			ok: false,
 			status: 0,
 			message: "Could not reach the store service",
+		}
+	}
+}
+
+/** Call a payment endpoint (cart, checkout, purchase) with cookies and CSRF. */
+export async function callPayment<T>(
+	context: BackendContext,
+	path: string,
+	init: RequestInit = {},
+): Promise<ApiResult<T>> {
+	try {
+		const headers = new Headers(init.headers)
+		headers.set("Content-Type", "application/json")
+		// The payment endpoints compare this header with the access token's `jti`;
+		// the auth service mirrors that value into the non-httponly CSRF cookie.
+		headers.set("CSRF", context.csrf ?? "")
+
+		const response = await context.api(`${PAYMENT_API}${path}`, {
+			...init,
+			headers,
+		})
+		if (!response.ok) {
+			return {
+				ok: false,
+				status: response.status,
+				message: await readErrorMessage(response),
+			}
+		}
+		return { ok: true, data: (await response.json()) as T }
+	} catch (err) {
+		console.error(err)
+		return {
+			ok: false,
+			status: 0,
+			message: "Could not reach the payment service",
 		}
 	}
 }

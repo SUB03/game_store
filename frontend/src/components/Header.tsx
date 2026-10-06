@@ -26,9 +26,9 @@ export default function Header() {
 						/>
 					</a>
 					<div className="flex">
-						<Link to="/" className="header-nav-e">
+						<a href="/" className="header-nav-e">
 							STORE
-						</Link>
+						</a>
 						<Link to="/" className="header-nav-e">
 							COMMUNITY
 						</Link>

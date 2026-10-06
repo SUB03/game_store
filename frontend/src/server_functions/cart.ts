@@ -1,5 +1,5 @@
 import type { ApiResult } from "#/utils/api"
-import { authMiddleware, callStore } from "#/utils/api"
+import { authMiddleware, callPayment } from "#/utils/api"
 import { createServerFn } from "@tanstack/react-start"
 import z from "zod"
 
@@ -41,14 +41,14 @@ const emptyInput = z.object({})
  * Cart mutations are server functions: the browser posts to this app and the
  * request continues from here, inside the Docker network and with the user's
  * cookies, so nothing depends on the visitor being able to reach
- * `store_service` or on a reverse proxy in front of the app.
+ * `payment_service` or on a reverse proxy in front of the app.
  */
 export const addToCart = createServerFn({ method: "POST" })
 	.middleware([authMiddleware])
 	.validator(appidInput)
 	.handler(
 		async ({ data, context }): Promise<ApiResult<CartAddResponse>> =>
-			callStore<CartAddResponse>(context, "/store/cart", {
+			callPayment<CartAddResponse>(context, "/payment/cart", {
 				method: "POST",
 				body: JSON.stringify(data),
 			}),
@@ -59,7 +59,7 @@ export const removeFromCart = createServerFn({ method: "POST" })
 	.validator(appidInput)
 	.handler(
 		async ({ data, context }): Promise<ApiResult<CartRemoveResponse>> =>
-			callStore<CartRemoveResponse>(context, `/store/cart/${data.appid}`, {
+			callPayment<CartRemoveResponse>(context, `/payment/cart/${data.appid}`, {
 				method: "DELETE",
 			}),
 	)
@@ -69,7 +69,7 @@ export const clearCart = createServerFn({ method: "POST" })
 	.validator(emptyInput)
 	.handler(
 		async ({ context }): Promise<ApiResult<CartClearResponse>> =>
-			callStore<CartClearResponse>(context, "/store/cart", {
+			callPayment<CartClearResponse>(context, "/payment/cart", {
 				method: "DELETE",
 			}),
 	)
@@ -79,7 +79,7 @@ export const addToLibrary = createServerFn({ method: "POST" })
 	.validator(appidInput)
 	.handler(
 		async ({ data, context }): Promise<ApiResult<LibraryResponse>> =>
-			callStore<LibraryResponse>(context, "/store/library", {
+			callPayment<LibraryResponse>(context, "/payment/library", {
 				method: "POST",
 				body: JSON.stringify(data),
 			}),
@@ -90,7 +90,7 @@ export const checkout = createServerFn({ method: "POST" })
 	.validator(emptyInput)
 	.handler(
 		async ({ context }): Promise<ApiResult<CheckoutResponse>> =>
-			callStore<CheckoutResponse>(context, "/store/checkout", {
+			callPayment<CheckoutResponse>(context, "/payment/checkout", {
 				method: "POST",
 				body: JSON.stringify({}),
 			}),
