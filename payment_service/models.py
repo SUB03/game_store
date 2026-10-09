@@ -1,4 +1,5 @@
 from sqlalchemy import (
+    ARRAY,
     Table,
     Column,
     Integer,
@@ -9,7 +10,8 @@ from sqlalchemy import (
     Text,
     Boolean,
     ForeignKey,
-    MetaData
+    MetaData,
+    func,
 )
 
 metadata_obj = MetaData()
@@ -52,4 +54,30 @@ tags_table = Table(
     metadata_obj,
     Column("appid", BigInteger, ForeignKey("store_games.appid"), primary_key=True),
     Column("tags", Text, primary_key=True)
+)
+
+# Lifecycle state for one YooKassa payment, from checkout through the Kafka
+# grant saga to capture/cancel. Owned by payment_service (migrated below);
+# payment_consumer reads/writes the same table to report saga outcomes and
+# retry failed captures/cancels without payment_service in the loop.
+payments_table = Table(
+    "payment_payments",
+    metadata_obj,
+    Column("payment_id", Text, primary_key=True),
+    Column("username", Text, nullable=False),
+    Column("appids", ARRAY(BigInteger), nullable=False),
+    Column("idempotency_key", Text, nullable=False),
+    # pending -> grant_requested -> captured | canceled
+    #                            -> granted_pending_capture -> captured | capture_failed
+    #                            -> cancel_failed -> canceled | cancel_failed_permanent
+    Column("status", Text, nullable=False, server_default="pending"),
+    Column("attempts", Integer, nullable=False, server_default="0"),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column(
+        "updated_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    ),
 )

@@ -1,3 +1,4 @@
+import aiokafka
 import atexit, time, yaml
 import logging
 import logging.config
@@ -8,6 +9,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from payment_service.engine import engine
 from payment_service.router import router
+from payment_service.main_settings import Settings
 
 from typing import Awaitable, Callable
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
@@ -15,6 +17,11 @@ from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    producer = aiokafka.AIOKafkaProducer(
+        bootstrap_servers=Settings().kafka_bootstrap_servers
+    )
+    await producer.start()
+    app.state.producer = producer
     logger.info("payment_service has started")
     yield
     logger.info("payment_service has stopped")

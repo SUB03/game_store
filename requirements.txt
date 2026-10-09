@@ -5,6 +5,7 @@ anyio==4.14.2
 argon2-cffi==25.1.0
 argon2-cffi-bindings==25.1.0
 async_yookassa==1.0.3
+aiokafka==0.14.0
 certifi==2026.6.17
 cffi==2.1.0
 charset-normalizer==3.4.9

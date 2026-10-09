@@ -20,6 +20,20 @@ class AddGameToUserResponse(_message.Message):
     appid: int
     def __init__(self, appid: _Optional[int] = ...) -> None: ...
 
+class AddGamesIfNoneOwnedRequest(_message.Message):
+    __slots__ = ("username", "appids")
+    USERNAME_FIELD_NUMBER: _ClassVar[int]
+    APPIDS_FIELD_NUMBER: _ClassVar[int]
+    username: str
+    appids: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, username: _Optional[str] = ..., appids: _Optional[_Iterable[int]] = ...) -> None: ...
+
+class AddGamesIfNoneOwnedResponse(_message.Message):
+    __slots__ = ("already_owned",)
+    ALREADY_OWNED_FIELD_NUMBER: _ClassVar[int]
+    already_owned: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, already_owned: _Optional[_Iterable[int]] = ...) -> None: ...
+
 class HasGameRequest(_message.Message):
     __slots__ = ("username", "appid")
     USERNAME_FIELD_NUMBER: _ClassVar[int]
@@ -85,12 +99,10 @@ class GetCartRequest(_message.Message):
     def __init__(self, username: _Optional[str] = ...) -> None: ...
 
 class GetCartResponse(_message.Message):
-    __slots__ = ("appids", "checkout_key")
+    __slots__ = ("appids",)
     APPIDS_FIELD_NUMBER: _ClassVar[int]
-    CHECKOUT_KEY_FIELD_NUMBER: _ClassVar[int]
     appids: _containers.RepeatedScalarFieldContainer[int]
-    checkout_key: str
-    def __init__(self, appids: _Optional[_Iterable[int]] = ..., checkout_key: _Optional[str] = ...) -> None: ...
+    def __init__(self, appids: _Optional[_Iterable[int]] = ...) -> None: ...
 
 class ClearCartRequest(_message.Message):
     __slots__ = ("username",)

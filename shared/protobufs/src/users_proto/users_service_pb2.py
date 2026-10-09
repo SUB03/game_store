@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fusers_proto/users_service.proto\x12\x08users.v1\"7\n\x14\x41\x64\x64GameToUserRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"&\n\x15\x41\x64\x64GameToUserResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\"1\n\x0eHasGameRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"!\n\x0fHasGameResponse\x12\x0e\n\x06result\x18\x01 \x01(\x08\"(\n\x14GetOwnedGamesRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"\'\n\x15GetOwnedGamesResponse\x12\x0e\n\x06\x61ppids\x18\x01 \x03(\x03\"7\n\x14\x41\x64\x64GameToCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"5\n\x15\x41\x64\x64GameToCartResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\x12\r\n\x05\x61\x64\x64\x65\x64\x18\x02 \x01(\x08\"<\n\x19RemoveGameFromCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"<\n\x1aRemoveGameFromCartResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\x12\x0f\n\x07removed\x18\x02 \x01(\x08\"\"\n\x0eGetCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"7\n\x0fGetCartResponse\x12\x0e\n\x06\x61ppids\x18\x01 \x03(\x03\x12\x14\n\x0c\x63heckout_key\x18\x02 \x01(\t\"$\n\x10\x43learCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"$\n\x11\x43learCartResponse\x12\x0f\n\x07removed\x18\x01 \x01(\x05\x32\xaa\x04\n\x0bUserService\x12>\n\x07HasGame\x12\x18.users.v1.HasGameRequest\x1a\x19.users.v1.HasGameResponse\x12P\n\rAddGameToUser\x12\x1e.users.v1.AddGameToUserRequest\x1a\x1f.users.v1.AddGameToUserResponse\x12P\n\rGetOwnedGames\x12\x1e.users.v1.GetOwnedGamesRequest\x1a\x1f.users.v1.GetOwnedGamesResponse\x12P\n\rAddGameToCart\x12\x1e.users.v1.AddGameToCartRequest\x1a\x1f.users.v1.AddGameToCartResponse\x12_\n\x12RemoveGameFromCart\x12#.users.v1.RemoveGameFromCartRequest\x1a$.users.v1.RemoveGameFromCartResponse\x12>\n\x07GetCart\x12\x18.users.v1.GetCartRequest\x1a\x19.users.v1.GetCartResponse\x12\x44\n\tClearCart\x12\x1a.users.v1.ClearCartRequest\x1a\x1b.users.v1.ClearCartResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fusers_proto/users_service.proto\x12\x08users.v1\"7\n\x14\x41\x64\x64GameToUserRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"&\n\x15\x41\x64\x64GameToUserResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\">\n\x1a\x41\x64\x64GamesIfNoneOwnedRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\x0e\n\x06\x61ppids\x18\x02 \x03(\x03\"4\n\x1b\x41\x64\x64GamesIfNoneOwnedResponse\x12\x15\n\ralready_owned\x18\x01 \x03(\x03\"1\n\x0eHasGameRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"!\n\x0fHasGameResponse\x12\x0e\n\x06result\x18\x01 \x01(\x08\"(\n\x14GetOwnedGamesRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"\'\n\x15GetOwnedGamesResponse\x12\x0e\n\x06\x61ppids\x18\x01 \x03(\x03\"7\n\x14\x41\x64\x64GameToCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"5\n\x15\x41\x64\x64GameToCartResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\x12\r\n\x05\x61\x64\x64\x65\x64\x18\x02 \x01(\x08\"<\n\x19RemoveGameFromCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\x12\r\n\x05\x61ppid\x18\x02 \x01(\x03\"<\n\x1aRemoveGameFromCartResponse\x12\r\n\x05\x61ppid\x18\x01 \x01(\x03\x12\x0f\n\x07removed\x18\x02 \x01(\x08\"\"\n\x0eGetCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"!\n\x0fGetCartResponse\x12\x0e\n\x06\x61ppids\x18\x01 \x03(\x03\"$\n\x10\x43learCartRequest\x12\x10\n\x08username\x18\x01 \x01(\t\"$\n\x11\x43learCartResponse\x12\x0f\n\x07removed\x18\x01 \x01(\x05\x32\x8e\x05\n\x0bUserService\x12>\n\x07HasGame\x12\x18.users.v1.HasGameRequest\x1a\x19.users.v1.HasGameResponse\x12P\n\rAddGameToUser\x12\x1e.users.v1.AddGameToUserRequest\x1a\x1f.users.v1.AddGameToUserResponse\x12\x62\n\x13\x41\x64\x64GamesIfNoneOwned\x12$.users.v1.AddGamesIfNoneOwnedRequest\x1a%.users.v1.AddGamesIfNoneOwnedResponse\x12P\n\rGetOwnedGames\x12\x1e.users.v1.GetOwnedGamesRequest\x1a\x1f.users.v1.GetOwnedGamesResponse\x12P\n\rAddGameToCart\x12\x1e.users.v1.AddGameToCartRequest\x1a\x1f.users.v1.AddGameToCartResponse\x12_\n\x12RemoveGameFromCart\x12#.users.v1.RemoveGameFromCartRequest\x1a$.users.v1.RemoveGameFromCartResponse\x12>\n\x07GetCart\x12\x18.users.v1.GetCartRequest\x1a\x19.users.v1.GetCartResponse\x12\x44\n\tClearCart\x12\x1a.users.v1.ClearCartRequest\x1a\x1b.users.v1.ClearCartResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,30 +35,34 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_ADDGAMETOUSERREQUEST']._serialized_end=100
   _globals['_ADDGAMETOUSERRESPONSE']._serialized_start=102
   _globals['_ADDGAMETOUSERRESPONSE']._serialized_end=140
-  _globals['_HASGAMEREQUEST']._serialized_start=142
-  _globals['_HASGAMEREQUEST']._serialized_end=191
-  _globals['_HASGAMERESPONSE']._serialized_start=193
-  _globals['_HASGAMERESPONSE']._serialized_end=226
-  _globals['_GETOWNEDGAMESREQUEST']._serialized_start=228
-  _globals['_GETOWNEDGAMESREQUEST']._serialized_end=268
-  _globals['_GETOWNEDGAMESRESPONSE']._serialized_start=270
-  _globals['_GETOWNEDGAMESRESPONSE']._serialized_end=309
-  _globals['_ADDGAMETOCARTREQUEST']._serialized_start=311
-  _globals['_ADDGAMETOCARTREQUEST']._serialized_end=366
-  _globals['_ADDGAMETOCARTRESPONSE']._serialized_start=368
-  _globals['_ADDGAMETOCARTRESPONSE']._serialized_end=421
-  _globals['_REMOVEGAMEFROMCARTREQUEST']._serialized_start=423
-  _globals['_REMOVEGAMEFROMCARTREQUEST']._serialized_end=483
-  _globals['_REMOVEGAMEFROMCARTRESPONSE']._serialized_start=485
-  _globals['_REMOVEGAMEFROMCARTRESPONSE']._serialized_end=545
-  _globals['_GETCARTREQUEST']._serialized_start=547
-  _globals['_GETCARTREQUEST']._serialized_end=581
-  _globals['_GETCARTRESPONSE']._serialized_start=583
-  _globals['_GETCARTRESPONSE']._serialized_end=638
-  _globals['_CLEARCARTREQUEST']._serialized_start=640
-  _globals['_CLEARCARTREQUEST']._serialized_end=676
-  _globals['_CLEARCARTRESPONSE']._serialized_start=678
-  _globals['_CLEARCARTRESPONSE']._serialized_end=714
-  _globals['_USERSERVICE']._serialized_start=717
-  _globals['_USERSERVICE']._serialized_end=1271
+  _globals['_ADDGAMESIFNONEOWNEDREQUEST']._serialized_start=142
+  _globals['_ADDGAMESIFNONEOWNEDREQUEST']._serialized_end=204
+  _globals['_ADDGAMESIFNONEOWNEDRESPONSE']._serialized_start=206
+  _globals['_ADDGAMESIFNONEOWNEDRESPONSE']._serialized_end=258
+  _globals['_HASGAMEREQUEST']._serialized_start=260
+  _globals['_HASGAMEREQUEST']._serialized_end=309
+  _globals['_HASGAMERESPONSE']._serialized_start=311
+  _globals['_HASGAMERESPONSE']._serialized_end=344
+  _globals['_GETOWNEDGAMESREQUEST']._serialized_start=346
+  _globals['_GETOWNEDGAMESREQUEST']._serialized_end=386
+  _globals['_GETOWNEDGAMESRESPONSE']._serialized_start=388
+  _globals['_GETOWNEDGAMESRESPONSE']._serialized_end=427
+  _globals['_ADDGAMETOCARTREQUEST']._serialized_start=429
+  _globals['_ADDGAMETOCARTREQUEST']._serialized_end=484
+  _globals['_ADDGAMETOCARTRESPONSE']._serialized_start=486
+  _globals['_ADDGAMETOCARTRESPONSE']._serialized_end=539
+  _globals['_REMOVEGAMEFROMCARTREQUEST']._serialized_start=541
+  _globals['_REMOVEGAMEFROMCARTREQUEST']._serialized_end=601
+  _globals['_REMOVEGAMEFROMCARTRESPONSE']._serialized_start=603
+  _globals['_REMOVEGAMEFROMCARTRESPONSE']._serialized_end=663
+  _globals['_GETCARTREQUEST']._serialized_start=665
+  _globals['_GETCARTREQUEST']._serialized_end=699
+  _globals['_GETCARTRESPONSE']._serialized_start=701
+  _globals['_GETCARTRESPONSE']._serialized_end=734
+  _globals['_CLEARCARTREQUEST']._serialized_start=736
+  _globals['_CLEARCARTREQUEST']._serialized_end=772
+  _globals['_CLEARCARTRESPONSE']._serialized_start=774
+  _globals['_CLEARCARTRESPONSE']._serialized_end=810
+  _globals['_USERSERVICE']._serialized_start=813
+  _globals['_USERSERVICE']._serialized_end=1467
 # @@protoc_insertion_point(module_scope)

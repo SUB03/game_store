@@ -1,9 +1,9 @@
 import grpc, asyncio
-import uuid
 from grpc.aio import ServicerContext
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from models import games_ownership, users_cart
@@ -14,6 +14,8 @@ from users_proto.users_service_pb2 import (
     AddGameToCartResponse,
     AddGameToUserRequest,
     AddGameToUserResponse,
+    AddGamesIfNoneOwnedRequest,
+    AddGamesIfNoneOwnedResponse,
     ClearCartRequest,
     ClearCartResponse,
     GetCartRequest,
@@ -41,8 +43,36 @@ class UsersServiceServicer(users_service_pb2_grpc.UserServiceServicer):
         context: ServicerContext
     ) -> AddGameToUserResponse:
         async with self.engine.begin() as conn:
-            await conn.execute(games_ownership.insert().values(username=request.username, appid=request.appid))
+            await conn.execute(
+                pg_insert(games_ownership)
+                .values(username=request.username, appid=request.appid)
+                .on_conflict_do_nothing()
+            )
         return AddGameToUserResponse(appid=request.appid)
+
+    async def AddGamesIfNoneOwned(
+        self,
+        request: AddGamesIfNoneOwnedRequest,
+        context: ServicerContext
+    ) -> AddGamesIfNoneOwnedResponse:
+        appids = sorted(set(request.appids))
+        async with self.engine.begin() as conn:
+            result = await conn.execute(
+                select(games_ownership.c.appid).where(
+                    games_ownership.c.username == request.username,
+                    games_ownership.c.appid.in_(appids),
+                )
+            )
+            owned = sorted(row.appid for row in result.fetchall())
+            if not owned:
+                await conn.execute(
+                    pg_insert(games_ownership),
+                    [
+                        {"username": request.username, "appid": appid}
+                        for appid in appids
+                    ],
+                )
+        return AddGamesIfNoneOwnedResponse(already_owned=owned)
 
     async def HasGame(
         self,
@@ -83,15 +113,6 @@ class UsersServiceServicer(users_service_pb2_grpc.UserServiceServicer):
         context: ServicerContext
     ) -> AddGameToCartResponse:
         async with self.engine.begin() as conn:
-            result = await conn.execute(
-                users_cart.select().where(users_cart.c.username == request.username)
-            )
-            existing = result.fetchone()
-            # The first item of an empty cart generates the cart-wide key;
-            # every later insert reuses it so one cart = one Idempotence-Key.
-            checkout_key = (
-                existing.checkout_key if existing is not None else str(uuid.uuid4())
-            )
             # (username, appid) is the primary key and adding is idempotent:
             # ON CONFLICT DO NOTHING turns a repeat add into a harmless no-op.
             # Generic Table.insert() has no on_conflict_* methods - they live
@@ -106,7 +127,6 @@ class UsersServiceServicer(users_service_pb2_grpc.UserServiceServicer):
                 .values(
                     username=request.username,
                     appid=request.appid,
-                    checkout_key=checkout_key,
                 )
                 .on_conflict_do_nothing()
                 .returning(users_cart.c.appid)
@@ -143,8 +163,7 @@ class UsersServiceServicer(users_service_pb2_grpc.UserServiceServicer):
             rows = result.fetchall()
 
         appids = [row.appid for row in rows]
-        checkout_key = rows[0].checkout_key if rows else ""
-        return GetCartResponse(appids=appids, checkout_key=checkout_key)
+        return GetCartResponse(appids=appids)
 
     async def ClearCart(
         self,

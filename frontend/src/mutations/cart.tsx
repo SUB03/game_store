@@ -14,6 +14,10 @@ import type {
 	LibraryResponse,
 } from "#/server_functions/cart"
 import type { ApiResult } from "#/utils/api"
+import {
+	clearCheckoutIdempotencyKey,
+	getOrCreateCheckoutIdempotencyKey,
+} from "#/utils/idempotency"
 
 export type { CheckoutResponse }
 
@@ -44,6 +48,9 @@ export function useAddToCart() {
 	return useMutation<CartAddResponse, CartError, number>({
 		mutationFn: async (appid) => unwrap(await addToCart({ data: { appid } })),
 		onSuccess: () => {
+			// A changed cart is a new purchase intent - the next checkout
+			// must get a fresh idempotency key.
+			clearCheckoutIdempotencyKey()
 			// Awaited by callers that need the cart to already contain the game
 			// (the "added to cart" modal lists the freshly fetched cart).
 			return queryClient.invalidateQueries({ queryKey: ["cart"] })
@@ -57,7 +64,10 @@ export function useRemoveFromCart() {
 	return useMutation<CartRemoveResponse, CartError, number>({
 		mutationFn: async (appid) =>
 			unwrap(await removeFromCart({ data: { appid } })),
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cart"] }),
+		onSuccess: () => {
+			clearCheckoutIdempotencyKey()
+			return queryClient.invalidateQueries({ queryKey: ["cart"] })
+		},
 	})
 }
 
@@ -66,7 +76,10 @@ export function useClearCart() {
 
 	return useMutation<CartClearResponse, CartError, void>({
 		mutationFn: async () => unwrap(await clearCart({ data: {} })),
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cart"] }),
+		onSuccess: () => {
+			clearCheckoutIdempotencyKey()
+			return queryClient.invalidateQueries({ queryKey: ["cart"] })
+		},
 	})
 }
 
@@ -86,8 +99,14 @@ export function useCheckout() {
 	const queryClient = useQueryClient()
 
 	return useMutation<CheckoutResponse, CartError, void>({
-		mutationFn: async () => unwrap(await checkout({ data: {} })),
+		mutationFn: async () => {
+			const idempotency_key = getOrCreateCheckoutIdempotencyKey()
+			return unwrap(await checkout({ data: { idempotency_key } }))
+		},
 		onSuccess: (data) => {
+			// This attempt is resolved either way - the next checkout (even
+			// of the same cart) is a new attempt and needs a new key.
+			clearCheckoutIdempotencyKey()
 			// Only clear the local cart once the games are actually granted;
 			// a redirect to YooKassa keeps the rows until the webhook fires.
 			if (!("confirmation_url" in data)) {

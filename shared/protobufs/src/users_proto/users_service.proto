@@ -11,6 +11,18 @@ message AddGameToUserResponse {
   int64 appid = 1;
 }
 
+// Batch variant used by the saga grant consumer: insert every appid only if
+// the user owns none of them; if the user owns some (but not all) of them,
+// insert nothing so money is never taken for a partially-owned bundle.
+message AddGamesIfNoneOwnedRequest {
+  string username = 1;
+  repeated int64 appids = 2;
+}
+
+message AddGamesIfNoneOwnedResponse {
+  repeated int64 already_owned = 1;
+}
+
 message HasGameRequest {
   string username = 1;
   int64 appid = 2;
@@ -54,9 +66,6 @@ message GetCartRequest {
 
 message GetCartResponse {
   repeated int64 appids = 1;
-  // Backend-generated key shared by every row of the cart; passed to
-  // YooKassa as the Idempotence-Key when the cart is checked out.
-  string checkout_key = 2;
 }
 
 message ClearCartRequest {
@@ -70,9 +79,11 @@ message ClearCartResponse {
 service UserService {
   rpc HasGame(HasGameRequest) returns (HasGameResponse);
   rpc AddGameToUser(AddGameToUserRequest) returns (AddGameToUserResponse);
+  rpc AddGamesIfNoneOwned(AddGamesIfNoneOwnedRequest) returns (AddGamesIfNoneOwnedResponse);
   rpc GetOwnedGames(GetOwnedGamesRequest) returns (GetOwnedGamesResponse);
   rpc AddGameToCart(AddGameToCartRequest) returns (AddGameToCartResponse);
   rpc RemoveGameFromCart(RemoveGameFromCartRequest) returns (RemoveGameFromCartResponse);
   rpc GetCart(GetCartRequest) returns (GetCartResponse);
   rpc ClearCart(ClearCartRequest) returns (ClearCartResponse);
 }
+

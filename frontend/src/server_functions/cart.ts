@@ -36,6 +36,7 @@ export type CheckoutResponse = CheckoutRedirect | CheckoutGranted
 
 const appidInput = z.object({ appid: z.number().int() })
 const emptyInput = z.object({})
+const checkoutInput = z.object({ idempotency_key: z.string().uuid() })
 
 /**
  * Cart mutations are server functions: the browser posts to this app and the
@@ -87,11 +88,11 @@ export const addToLibrary = createServerFn({ method: "POST" })
 
 export const checkout = createServerFn({ method: "POST" })
 	.middleware([authMiddleware])
-	.validator(emptyInput)
+	.validator(checkoutInput)
 	.handler(
-		async ({ context }): Promise<ApiResult<CheckoutResponse>> =>
+		async ({ data, context }): Promise<ApiResult<CheckoutResponse>> =>
 			callPayment<CheckoutResponse>(context, "/payment/checkout", {
 				method: "POST",
-				body: JSON.stringify({}),
+				body: JSON.stringify(data),
 			}),
 	)

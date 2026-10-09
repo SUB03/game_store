@@ -1,7 +1,7 @@
-"""Unit tests for the YooKassa webhook endpoint (gRPC / DB are mocked)."""
+"""Unit tests for the YooKassa webhook endpoint (Kafka producer is mocked)."""
 
 import json
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock
 
 import pytest
 from starlette.requests import Request
@@ -20,151 +20,139 @@ def _request(payload: bytes) -> Request:
         "headers": [],
         "query_string": b"",
         "client": ("127.0.0.1", 1),
+        "app": AppStub(),
     }
     return Request(scope, receive)
 
 
-@pytest.fixture
-def mocks(monkeypatch):
-    has_game = AsyncMock(return_value=False)
-    add_game = AsyncMock(return_value={"message": "added the game", "appid": 42})
-    remove_game_from_cart = AsyncMock(return_value={"appid": 42, "removed": True})
-    monkeypatch.setattr(payment_router, "has_game", has_game)
-    monkeypatch.setattr(payment_router, "add_game", add_game)
-    monkeypatch.setattr(payment_router, "remove_game_from_cart", remove_game_from_cart)
-    return {
-        "has_game": has_game,
-        "add_game": add_game,
-        "remove_game_from_cart": remove_game_from_cart,
+class AppStub:
+    def __init__(self):
+        self.state = StateStub()
+
+
+class StateStub:
+    def __init__(self):
+        self.producer = AsyncMock()
+
+
+def _waiting_for_capture(
+    payment_id="pay-1", username="alice", appids="42"
+) -> bytes:
+    metadata = {}
+    if username is not None:
+        metadata["username"] = username
+    if appids is not None:
+        metadata["appids"] = appids
+    return json.dumps(
+        {
+            "event": "payment.waiting_for_capture",
+            "object": {"id": payment_id, "metadata": metadata},
+        }
+    ).encode()
+
+
+def _producer_of(request: Request) -> AsyncMock:
+    return request.scope["app"].state.producer
+
+
+@pytest.fixture(autouse=True)
+def mark_grant_requested(monkeypatch):
+    mock = AsyncMock(return_value=True)
+    monkeypatch.setattr(payment_router, "mark_grant_requested", mock)
+    return mock
+
+
+async def test_waiting_for_capture_publishes_a_grant_request():
+    request = _request(_waiting_for_capture())
+    response = await payment_router.notifications(request)
+
+    assert response == {"status": "OK"}
+    producer = _producer_of(request)
+    producer.send_and_wait.assert_awaited_once()
+    topic, body = producer.send_and_wait.await_args.args
+    assert topic == payment_router.get_payment_settings().grant_requests_topic
+    assert json.loads(body) == {
+        "payment_id": "pay-1",
+        "username": "alice",
+        "appids": [42],
     }
 
 
-def _succeeded(username="alice", appid="42", appids=None) -> bytes:
-    metadata = {"username": username}
-    if appids is not None:
-        metadata["appids"] = appids
-    if appid is not None:
-        metadata["appid"] = appid
-    return json.dumps(
-        {
-            "event": "payment.succeeded",
-            "object": {"metadata": metadata},
-        }
-    ).encode()
+async def test_cart_payment_publishes_every_appid():
+    request = _request(_waiting_for_capture(appids="1,2,3"))
+    response = await payment_router.notifications(request)
 
-
-async def test_succeeded_payment_grants_the_game(mocks):
-    response = await payment_router.notifications(_request(_succeeded()))
     assert response == {"status": "OK"}
-    mocks["has_game"].assert_awaited_once_with(username="alice", appid=42)
-    mocks["add_game"].assert_awaited_once_with(username="alice", appid=42)
+    _, body = _producer_of(request).send_and_wait.await_args.args
+    assert json.loads(body)["appids"] == [1, 2, 3]
 
 
-async def test_succeeded_payment_is_idempotent(mocks):
-    mocks["has_game"].return_value = True
-    response = await payment_router.notifications(_request(_succeeded()))
-    assert response == {"status": "OK"}
-    mocks["add_game"].assert_not_awaited()
-
-
-async def test_other_events_are_ignored(mocks):
+async def test_other_events_are_ignored():
     payload = json.dumps(
         {
             "event": "payment.canceled",
-            "object": {"metadata": {"username": "alice", "appid": "42"}},
+            "object": {"id": "pay-1", "metadata": {"username": "alice", "appids": "42"}},
         }
     ).encode()
-    response = await payment_router.notifications(_request(payload))
-    assert response == {"status": "OK"}
-    mocks["has_game"].assert_not_awaited()
-    mocks["add_game"].assert_not_awaited()
-
-
-async def test_missing_metadata_is_ignored(mocks):
-    payload = json.dumps({"event": "payment.succeeded", "object": {}}).encode()
-    response = await payment_router.notifications(_request(payload))
-    assert response == {"status": "OK"}
-    mocks["has_game"].assert_not_awaited()
-    mocks["add_game"].assert_not_awaited()
-
-
-async def test_non_integer_appid_is_ignored(mocks):
-    response = await payment_router.notifications(
-        _request(_succeeded(appid="not-a-number"))
-    )
-    assert response == {"status": "OK"}
-    mocks["has_game"].assert_not_awaited()
-    mocks["add_game"].assert_not_awaited()
-
-
-async def test_malformed_body_is_accepted(mocks):
-    response = await payment_router.notifications(_request(b"not json"))
-    assert response == {"status": "OK"}
-    mocks["has_game"].assert_not_awaited()
-    mocks["add_game"].assert_not_awaited()
-
-
-# --- cart (multi-game) payments ----------------------------------------------
-
-
-async def test_cart_payment_grants_every_game_in_appids_metadata(mocks):
-    response = await payment_router.notifications(
-        _request(_succeeded(appid=None, appids="1,2,3"))
-    )
+    request = _request(payload)
+    response = await payment_router.notifications(request)
 
     assert response == {"status": "OK"}
-    assert mocks["has_game"].await_args_list == [
-        call(username="alice", appid=1),
-        call(username="alice", appid=2),
-        call(username="alice", appid=3),
-    ]
-    assert mocks["add_game"].await_args_list == [
-        call(username="alice", appid=1),
-        call(username="alice", appid=2),
-        call(username="alice", appid=3),
-    ]
-    # every paid game is stripped from the cart once granted
-    assert mocks["remove_game_from_cart"].await_args_list == [
-        call(username="alice", appid=1),
-        call(username="alice", appid=2),
-        call(username="alice", appid=3),
-    ]
+    _producer_of(request).send_and_wait.assert_not_awaited()
 
 
-async def test_cart_payment_strips_rows_even_when_already_owned(mocks):
-    mocks["has_game"].return_value = True
-
-    response = await payment_router.notifications(
-        _request(_succeeded(appid=None, appids="1,2"))
-    )
+async def test_missing_metadata_is_ignored():
+    payload = json.dumps(
+        {"event": "payment.waiting_for_capture", "object": {"id": "pay-1"}}
+    ).encode()
+    request = _request(payload)
+    response = await payment_router.notifications(request)
 
     assert response == {"status": "OK"}
-    mocks["add_game"].assert_not_awaited()
-    assert mocks["remove_game_from_cart"].await_args_list == [
-        call(username="alice", appid=1),
-        call(username="alice", appid=2),
-    ]
+    _producer_of(request).send_and_wait.assert_not_awaited()
 
 
-async def test_cart_strip_failure_never_fails_the_webhook(mocks):
-    mocks["remove_game_from_cart"].side_effect = RuntimeError("users_service down")
-
-    response = await payment_router.notifications(
-        _request(_succeeded(appid=None, appids="1,2"))
-    )
-
-    # the games were granted; cart cleanup is best effort so YooKassa's
-    # retry storm cannot be triggered by a cleanup hiccup
-    assert response == {"status": "OK"}
-    assert mocks["add_game"].await_count == 2
-
-
-async def test_invalid_appids_metadata_is_ignored(mocks):
-    response = await payment_router.notifications(
-        _request(_succeeded(appid=None, appids="not,numbers"))
-    )
+async def test_missing_username_is_ignored():
+    request = _request(_waiting_for_capture(username=None))
+    response = await payment_router.notifications(request)
 
     assert response == {"status": "OK"}
-    mocks["has_game"].assert_not_awaited()
-    mocks["add_game"].assert_not_awaited()
-    mocks["remove_game_from_cart"].assert_not_awaited()
+    _producer_of(request).send_and_wait.assert_not_awaited()
+
+
+async def test_non_integer_appids_are_dropped_individually():
+    request = _request(_waiting_for_capture(appids="1,not-a-number,3"))
+    response = await payment_router.notifications(request)
+
+    assert response == {"status": "OK"}
+    _, body = _producer_of(request).send_and_wait.await_args.args
+    assert json.loads(body)["appids"] == [1, 3]
+
+
+async def test_all_invalid_appids_are_ignored():
+    request = _request(_waiting_for_capture(appids="not,numbers"))
+    response = await payment_router.notifications(request)
+
+    assert response == {"status": "OK"}
+    _producer_of(request).send_and_wait.assert_not_awaited()
+
+
+async def test_malformed_body_is_accepted():
+    request = _request(b"not json")
+    response = await payment_router.notifications(request)
+
+    assert response == {"status": "OK"}
+    _producer_of(request).send_and_wait.assert_not_awaited()
+
+
+async def test_redelivered_webhook_is_not_republished(mark_grant_requested):
+    # a payment already past `pending` (grant already requested, or unknown)
+    # means this is a YooKassa retry of a webhook already handled once
+    mark_grant_requested.return_value = False
+
+    request = _request(_waiting_for_capture())
+    response = await payment_router.notifications(request)
+
+    assert response == {"status": "OK"}
+    mark_grant_requested.assert_awaited_once_with("pay-1")
+    _producer_of(request).send_and_wait.assert_not_awaited()

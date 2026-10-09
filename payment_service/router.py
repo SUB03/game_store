@@ -1,16 +1,18 @@
+import json
 import logging
+import uuid
 from typing import Annotated
 
+from aiokafka import AIOKafkaProducer
 from fastapi import HTTPException, routing, status, Request, Cookie, Header, Path
 from sqlalchemy import select, func
 
-from payment_service.schemas import Price, PurchaseGame, CartItem, LibraryGame
+from payment_service.schemas import Price, CartItem, LibraryGame, CheckoutRequest
 from payment_service.engine import engine
 from payment_service.models import games_table, tags_table
 from payment_service.payment_utils import (
     get_price,
     has_game,
-    make_payment,
     add_game,
     get_owned_games,
     add_game_to_cart,
@@ -18,7 +20,9 @@ from payment_service.payment_utils import (
     get_user_cart,
     clear_user_cart,
     make_payment_cart,
+    get_payment_settings,
 )
+from payment_service.payments_store import create_payment, mark_grant_requested
 from payment_service.jwt_utils import decode_jwt
 from payment_service.token import Token
 
@@ -45,49 +49,11 @@ def _check_csrf(claims: Token, csrf: str | None) -> None:
             detail="could not validate credentials",
         )
 
-@router.post("/purchase_game")
-async def purchase_game(
-    purchase: PurchaseGame,
-    csrf: Annotated[str | None, Header(alias="CSRF")] = None,
-    access_token: Annotated[str | None, Cookie()] = None,
-):
-    claims = _claims_or_401(access_token)
-    _check_csrf(claims, csrf)
-
-    if await has_game(username=claims.sub, appid=purchase.appid):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="already owned by the user",
-        )
-
-    game_price = await get_price(purchase.appid)
-    if game_price is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="appid is not found",
-        )
-
-    price = Price(**game_price._asdict())
-    if price.price <= 0:
-        result = await add_game(username=claims.sub, appid=purchase.appid)
-        return {"message": result.get("message", "added the game"), "appid": purchase.appid}
-
-    response = await make_payment(
-        username=claims.sub,
-        appid=purchase.appid,
-        price=str(game_price.price),
-    )
-    return {
-        "payment_id": response["payment_id"],
-        "confirmation_url": response["confirmation_url"],
-    }
-
-
 @router.get("/cart")
 async def get_cart(access_token: Annotated[str | None, Cookie()] = None):
     claims = _claims_or_401(access_token)
 
-    appids, _ = await get_user_cart(username=claims.sub)
+    appids = await get_user_cart(username=claims.sub)
     if not appids:
         return {"results": []}
 
@@ -199,13 +165,22 @@ async def clear_cart(
 
 @router.post("/checkout")
 async def checkout(
+    checkout_request: CheckoutRequest,
     csrf: Annotated[str | None, Header(alias="CSRF")] = None,
     access_token: Annotated[str | None, Cookie()] = None,
 ):
     claims = _claims_or_401(access_token)
     _check_csrf(claims, csrf)
 
-    appids, checkout_key = await get_user_cart(username=claims.sub)
+    try:
+        idempotency_key = uuid.UUID(checkout_request.idempotency_key)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="idempotency_key must be a valid UUID",
+        )
+
+    appids = await get_user_cart(username=claims.sub)
     if not appids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -259,7 +234,13 @@ async def checkout(
         username=claims.sub,
         appids=to_pay,
         price=f"{total:.2f}",
-        checkout_key=checkout_key,
+        idempotency_key=idempotency_key,
+    )
+    await create_payment(
+        payment_id=response["payment_id"],
+        username=claims.sub,
+        appids=to_pay,
+        idempotency_key=checkout_request.idempotency_key,
     )
     return {
         "payment_id": response["payment_id"],
@@ -280,103 +261,44 @@ async def notifications(request: Request):
         )
         return {"status": "OK"}
 
-    if not isinstance(payload, dict):
-        logger.warning(
-            "YooKassa notification ignored: JSON payload is not an object",
-            extra={"payload_type": type(payload).__name__},
-        )
+    # capture=False means YooKassa authorizes the hold and reports
+    # `payment.waiting_for_capture`; the grant saga captures (or cancels)
+    # it once ownership has actually been granted.
+    if payload.get("event") != "payment.waiting_for_capture":
         return {"status": "OK"}
 
-    event = payload.get("event")
     obj = payload.get("object")
-    payment_id = obj.get("id") if isinstance(obj, dict) else None
-    log_context = {
-        "event": event,
-        "payment_id": payment_id,
-    }
-
-    if event != "payment.succeeded":
-        logger.info(
-            "YooKassa notification ignored: event is not payment.succeeded",
-            extra=log_context,
-        )
+    if not isinstance(obj, dict):
         return {"status": "OK"}
 
-    metadata = obj.get("metadata") if isinstance(obj, dict) else None
-    metadata = metadata if isinstance(metadata, dict) else {}
+    payment_id = obj.get("id")
+    metadata = obj.get("metadata") or {}
     username = metadata.get("username")
-    raw_appids = metadata.get("appids")
+    appids_raw = metadata.get("appids")
+
+    if not username or not appids_raw:
+        return {"status": "OK"}
 
     appids: list[int] = []
-    if raw_appids:
+    for raw_appid in appids_raw.split(","):
         try:
-            appids = [int(part) for part in str(raw_appids).split(",") if part.strip()]
-        except (TypeError, ValueError):
-            appids = []
-
+            appids.append(int(raw_appid))
+        except ValueError:
+            continue
     if not appids:
-        raw_appid = metadata.get("appid")
-        try:
-            appids = [int(raw_appid)] if raw_appid is not None else []
-        except (TypeError, ValueError):
-            appids = []
-
-    if not username or not appids:
-        logger.warning(
-            "Succeeded payment ignored: username or appid metadata is missing",
-            extra={
-                **log_context,
-                "username": username,
-                "raw_appids": repr(raw_appids)[:200],
-            },
-        )
         return {"status": "OK"}
 
-    for appid in appids:
-        ownership_context = {**log_context, "username": username, "appid": appid}
-        logger.info("Checking ownership for succeeded payment", extra=ownership_context)
-        try:
-            already_owned = await has_game(username=username, appid=appid)
-        except Exception as exc:
-            logger.exception(
-                "Failed to check ownership for succeeded payment",
-                extra={**ownership_context, "error_type": type(exc).__name__},
-            )
-            raise
+    # Dedupe a webhook YooKassa redelivers: only the first delivery for a
+    # given payment_id is still `pending` and gets to publish a grant request.
+    if not await mark_grant_requested(payment_id):
+        return {"status": "OK"}
 
-        if already_owned:
-            logger.info(
-                "Game is already owned; skipping grant for succeeded payment",
-                extra={**ownership_context, "already_owned": True},
-            )
-            continue
-
-        try:
-            result = await add_game(username=username, appid=appid)
-        except Exception as exc:
-            logger.exception(
-                "Failed to add game for succeeded payment",
-                extra={**ownership_context, "error_type": type(exc).__name__},
-            )
-            raise
-
-        logger.info(
-            "Successfully added game for succeeded payment",
-            extra={
-                **ownership_context,
-                "result_appid": result.get("appid") if isinstance(result, dict) else None,
-            },
-        )
-
-    for appid in appids:
-        try:
-            await remove_game_from_cart(username=username, appid=appid)
-        except Exception:
-            logger.warning(
-                "Failed to remove purchased game from cart",
-                extra={**log_context, "username": username, "appid": appid},
-                exc_info=True,
-            )
+    message = {"payment_id": payment_id, "username": username, "appids": appids}
+    producer: AIOKafkaProducer = request.app.state.producer
+    await producer.send_and_wait(
+        get_payment_settings().grant_requests_topic,
+        json.dumps(message).encode("utf-8"),
+    )
 
     return {"status": "OK"}
 

@@ -44,6 +44,11 @@ class UserServiceStub:
                 request_serializer=users__proto_dot_users__service__pb2.AddGameToUserRequest.SerializeToString,
                 response_deserializer=users__proto_dot_users__service__pb2.AddGameToUserResponse.FromString,
                 _registered_method=True)
+        self.AddGamesIfNoneOwned = channel.unary_unary(
+                '/users.v1.UserService/AddGamesIfNoneOwned',
+                request_serializer=users__proto_dot_users__service__pb2.AddGamesIfNoneOwnedRequest.SerializeToString,
+                response_deserializer=users__proto_dot_users__service__pb2.AddGamesIfNoneOwnedResponse.FromString,
+                _registered_method=True)
         self.GetOwnedGames = channel.unary_unary(
                 '/users.v1.UserService/GetOwnedGames',
                 request_serializer=users__proto_dot_users__service__pb2.GetOwnedGamesRequest.SerializeToString,
@@ -81,6 +86,12 @@ class UserServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def AddGameToUser(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AddGamesIfNoneOwned(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -128,6 +139,11 @@ def add_UserServiceServicer_to_server(servicer, server):
                     servicer.AddGameToUser,
                     request_deserializer=users__proto_dot_users__service__pb2.AddGameToUserRequest.FromString,
                     response_serializer=users__proto_dot_users__service__pb2.AddGameToUserResponse.SerializeToString,
+            ),
+            'AddGamesIfNoneOwned': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddGamesIfNoneOwned,
+                    request_deserializer=users__proto_dot_users__service__pb2.AddGamesIfNoneOwnedRequest.FromString,
+                    response_serializer=users__proto_dot_users__service__pb2.AddGamesIfNoneOwnedResponse.SerializeToString,
             ),
             'GetOwnedGames': grpc.unary_unary_rpc_method_handler(
                     servicer.GetOwnedGames,
@@ -209,6 +225,33 @@ class UserService:
             '/users.v1.UserService/AddGameToUser',
             users__proto_dot_users__service__pb2.AddGameToUserRequest.SerializeToString,
             users__proto_dot_users__service__pb2.AddGameToUserResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AddGamesIfNoneOwned(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/users.v1.UserService/AddGamesIfNoneOwned',
+            users__proto_dot_users__service__pb2.AddGamesIfNoneOwnedRequest.SerializeToString,
+            users__proto_dot_users__service__pb2.AddGamesIfNoneOwnedResponse.FromString,
             options,
             channel_credentials,
             insecure,

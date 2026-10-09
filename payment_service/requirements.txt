@@ -13,3 +13,5 @@ prometheus_client==0.26.0
 grpcio==1.83.0
 grpcio-tools==1.83.0
 async_yookassa==1.0.3
+aiokafka==0.14.0
+alembic==1.18.5

@@ -1,0 +1,11 @@
+aiokafka==0.14.0
+grpcio==1.83.0
+grpcio-tools==1.83.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+pydantic_core==2.46.4
+async_yookassa==1.0.3
+SQLAlchemy==2.0.51
+psycopg==3.3.4
+psycopg-binary==3.3.4
+psycopg-pool==3.3.1

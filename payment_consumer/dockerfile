@@ -1,0 +1,20 @@
+FROM python:3.14
+
+WORKDIR /src
+
+COPY ./payment_consumer/requirements.txt /src/requirements.txt
+
+RUN pip install --no-cache-dir --upgrade pip \
+&& pip install --no-cache-dir -r /src/requirements.txt
+
+COPY ./payment_consumer /src/payment_consumer
+COPY .env /src/payment_consumer
+
+# installs protos
+COPY ./shared/protobufs /src/protobufs
+WORKDIR /src/protobufs
+RUN rm -rf ./src/*.egg-info ./build .eggs \
+    && python -m pip install --no-cache-dir .
+WORKDIR /src
+
+CMD ["python", "-m", "payment_consumer.main"]

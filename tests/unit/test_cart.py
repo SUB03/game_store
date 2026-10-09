@@ -17,8 +17,10 @@ import pytest
 from fastapi import HTTPException
 
 import payment_service.router as payment_router
-from payment_service.schemas import CartItem, LibraryGame
+from payment_service.schemas import CartItem, CheckoutRequest, LibraryGame
 from payment_service.jwt_utils import settings as payment_settings
+
+VALID_IDEMPOTENCY_KEY = "12345678-1234-5678-1234-567812345678"
 
 PriceRow = namedtuple("PriceRow", ["appid", "name", "price"])
 
@@ -88,12 +90,13 @@ def mocks(monkeypatch):
     remove_game_from_cart = AsyncMock(
         return_value={"appid": 42, "removed": True}
     )
-    get_user_cart = AsyncMock(return_value=([], ""))
+    get_user_cart = AsyncMock(return_value=[])
     clear_user_cart = AsyncMock(return_value=0)
     make_payment_cart = AsyncMock(
         return_value={"payment_id": "pay-1", "confirmation_url": "https://pay"}
     )
     get_owned_games = AsyncMock(return_value=[])
+    create_payment = AsyncMock(return_value=None)
     replacements = {
         "get_price": get_price,
         "has_game": has_game,
@@ -104,6 +107,7 @@ def mocks(monkeypatch):
         "clear_user_cart": clear_user_cart,
         "make_payment_cart": make_payment_cart,
         "get_owned_games": get_owned_games,
+        "create_payment": create_payment,
     }
     for name, mock in replacements.items():
         monkeypatch.setattr(payment_router, name, mock)
@@ -155,7 +159,7 @@ async def test_empty_cart_skips_all_lookups(mocks, fake_engine):
 
 
 async def test_cart_with_only_owned_games_skips_database(mocks, fake_engine):
-    mocks["get_user_cart"].return_value = ([42], "key-1")
+    mocks["get_user_cart"].return_value = [42]
     mocks["get_owned_games"].return_value = [42]
 
     result = await _get_cart(_access_token(str(uuid.uuid4())))
@@ -165,7 +169,7 @@ async def test_cart_with_only_owned_games_skips_database(mocks, fake_engine):
 
 
 async def test_get_cart_returns_joined_game_rows(mocks, fake_engine):
-    mocks["get_user_cart"].return_value = ([42], "key-1")
+    mocks["get_user_cart"].return_value = [42]
     mocks["get_owned_games"].return_value = []
     rows = [{"appid": 42, "name": "Some Game", "price": "9.99", "tags": ["Action"]}]
     fake_engine.rows = rows
@@ -368,8 +372,12 @@ async def test_clear_cart_returns_removed_count(mocks):
     mocks["clear_user_cart"].assert_awaited_once_with(username="bob")
 
 
-async def _checkout(csrf, access_token):
-    return await payment_router.checkout(csrf=csrf, access_token=access_token)
+async def _checkout(csrf, access_token, idempotency_key=VALID_IDEMPOTENCY_KEY):
+    return await payment_router.checkout(
+        CheckoutRequest(idempotency_key=idempotency_key),
+        csrf=csrf,
+        access_token=access_token,
+    )
 
 
 # --- POST /store/checkout -----------------------------------------------------
@@ -392,9 +400,18 @@ async def test_checkout_empty_cart_returns_400(mocks):
     mocks["make_payment_cart"].assert_not_awaited()
 
 
+async def test_checkout_rejects_invalid_idempotency_key(mocks):
+    jti = str(uuid.uuid4())
+    with pytest.raises(HTTPException) as exc_info:
+        await _checkout(jti, _access_token(jti), idempotency_key="not-a-uuid")
+    assert exc_info.value.status_code == 400
+    mocks["get_user_cart"].assert_not_awaited()
+    mocks["make_payment_cart"].assert_not_awaited()
+
+
 async def test_checkout_strips_owned_rows_then_rejects(mocks):
     jti = str(uuid.uuid4())
-    mocks["get_user_cart"].return_value = ([1, 2], "key-1")
+    mocks["get_user_cart"].return_value = [1, 2]
     mocks["get_owned_games"].return_value = [1, 2]
 
     with pytest.raises(HTTPException) as exc_info:
@@ -412,7 +429,7 @@ async def test_checkout_starts_one_payment_for_the_whole_cart(
     mocks, fake_engine
 ):
     jti = str(uuid.uuid4())
-    mocks["get_user_cart"].return_value = ([42, 43], "key-1")
+    mocks["get_user_cart"].return_value = [42, 43]
     fake_engine.rows = [
         SimpleNamespace(appid=42, price=Decimal("9.99")),
         SimpleNamespace(appid=43, price=Decimal("5.00")),
@@ -428,7 +445,13 @@ async def test_checkout_starts_one_payment_for_the_whole_cart(
         username="bob",
         appids=[42, 43],
         price="14.99",
-        checkout_key="key-1",
+        idempotency_key=uuid.UUID(VALID_IDEMPOTENCY_KEY),
+    )
+    mocks["create_payment"].assert_awaited_once_with(
+        payment_id="pay-1",
+        username="bob",
+        appids=[42, 43],
+        idempotency_key=VALID_IDEMPOTENCY_KEY,
     )
     # paid rows stay in the cart until the webhook grants them
     mocks["remove_game_from_cart"].assert_not_awaited()
@@ -437,7 +460,7 @@ async def test_checkout_starts_one_payment_for_the_whole_cart(
 
 async def test_checkout_strips_owned_rows_and_pays_the_rest(mocks, fake_engine):
     jti = str(uuid.uuid4())
-    mocks["get_user_cart"].return_value = ([42, 43], "key-1")
+    mocks["get_user_cart"].return_value = [42, 43]
     mocks["get_owned_games"].return_value = [42]
     fake_engine.rows = [SimpleNamespace(appid=43, price=Decimal("5.00"))]
 
@@ -451,13 +474,13 @@ async def test_checkout_strips_owned_rows_and_pays_the_rest(mocks, fake_engine):
         username="alice",
         appids=[43],
         price="5.00",
-        checkout_key="key-1",
+        idempotency_key=uuid.UUID(VALID_IDEMPOTENCY_KEY),
     )
 
 
 async def test_checkout_grants_free_rows_without_payment(mocks, fake_engine):
     jti = str(uuid.uuid4())
-    mocks["get_user_cart"].return_value = ([7], "key-1")
+    mocks["get_user_cart"].return_value = [7]
     fake_engine.rows = [SimpleNamespace(appid=7, price=Decimal("0.00"))]
 
     result = await _checkout(jti, _access_token(jti))
@@ -472,7 +495,7 @@ async def test_checkout_grants_free_rows_without_payment(mocks, fake_engine):
 
 async def test_checkout_drops_rows_missing_from_the_catalog(mocks, fake_engine):
     jti = str(uuid.uuid4())
-    mocks["get_user_cart"].return_value = ([7], "key-1")
+    mocks["get_user_cart"].return_value = [7]
     fake_engine.rows = []  # game no longer exists
 
     with pytest.raises(HTTPException) as exc_info:

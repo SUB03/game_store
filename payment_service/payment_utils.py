@@ -21,33 +21,21 @@ def get_payment_settings() -> PaymentSettings:
 
 
 async def _yookassa_payment(
-    username: str, appids: list[int], price: str, checkout_key: str = ""
+    username: str, appids: list[int], price: str, idempotency_key: uuid.UUID
 ):
-    """Create one YooKassa payment covering every appid (moved from the old gRPC servicer)."""
     settings = get_payment_settings()
-    if len(appids) > 1:
-        description = f"Purchase of {len(appids)} games by {username}"
-        return_url = f"{settings.frontend_url}/profile"
-    else:
-        description = f"Purchase of app {appids[0]} by {username}"
-        return_url = f"{settings.frontend_url}/app/{appids[0]}"
+    description = f"Purchase of {len(appids)} games by {username}"
+    return_url = f"{settings.frontend_url}/profile"
 
     # The webhook reads these to grant ownership of every paid game.
     metadata = {
         "username": username,
-        "appid": str(appids[0]),
         "appids": ",".join(str(appid) for appid in appids),
     }
 
-    idempotency_key = None
-    if checkout_key:
-        try:
-            idempotency_key = uuid.UUID(checkout_key)
-        except ValueError:
-            # Never fail a payment over a malformed key; the library
-            # generates a fresh random one when None is passed.
-            idempotency_key = None
-
+    # Two-step flow: the money moves only when the capture consumer confirms
+    # the grant succeeded. YooKassa notifies `payment.waiting_for_capture`,
+    # which the notifications endpoint publishes to Kafka.
     async with YooKassaClient(
         account_id=settings.shopid,
         secret_key=settings.ukass_api_key
@@ -55,7 +43,7 @@ async def _yookassa_payment(
         yookassa_request = PaymentRequest(
             amount=Amount(value=price, currency="RUB"),
             description=description,
-            capture=True,
+            capture=False,
             metadata=metadata,
             confirmation=RedirectConfirmationRequest(
                 type="redirect",
@@ -70,15 +58,10 @@ async def _yookassa_payment(
     return payment
 
 
-async def make_payment(username: str, appid: int, price: str):
-    payment = await _yookassa_payment(username, [appid], price)
-    return {"payment_id": payment.id, "confirmation_url": payment.confirmation.confirmation_url}
-
-
 async def make_payment_cart(
-    username: str, appids: list[int], price: str, checkout_key: str = ""
+    username: str, appids: list[int], price: str, idempotency_key: uuid.UUID
 ):
-    payment = await _yookassa_payment(username, appids, price, checkout_key)
+    payment = await _yookassa_payment(username, appids, price, idempotency_key)
     return {"payment_id": payment.id, "confirmation_url": payment.confirmation.confirmation_url}
 
 
@@ -183,7 +166,7 @@ async def remove_game_from_cart(username: str, appid: int) -> dict:
     return {"appid": response.appid, "removed": response.removed}
 
 
-async def get_user_cart(username: str) -> tuple[list[int], str]:
+async def get_user_cart(username: str) -> list[int]:
     channel = grpc.aio.insecure_channel("users_service:8003")
     stub = us_pb2_grpc.UserServiceStub(channel)
 
@@ -199,7 +182,7 @@ async def get_user_cart(username: str) -> tuple[list[int], str]:
     finally:
         await channel.close()
 
-    return list(response.appids), response.checkout_key
+    return list(response.appids)
 
 
 async def clear_user_cart(username: str) -> int:
