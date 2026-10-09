@@ -43,17 +43,7 @@ def _valid_jwt(username: str = "alice") -> str:
     )
 
 
-async def test_get_user_from_jwt_rejects_token_missing_from_whitelist(monkeypatch):
-    monkeypatch.setattr(users_utils, "get_token_from_db", AsyncMock(return_value=None))
-    with pytest.raises(HTTPException) as exc_info:
-        await users_utils.get_user_from_jwt(_valid_jwt())
-    assert exc_info.value.status_code == 401
-
-
 async def test_get_user_from_jwt_rejects_deleted_user(monkeypatch):
-    monkeypatch.setattr(
-        users_utils, "get_token_from_db", AsyncMock(return_value=("row",))
-    )
     monkeypatch.setattr(users_utils, "get_user", AsyncMock(return_value=None))
     with pytest.raises(HTTPException) as exc_info:
         await users_utils.get_user_from_jwt(_valid_jwt())
@@ -61,7 +51,6 @@ async def test_get_user_from_jwt_rejects_deleted_user(monkeypatch):
 
 
 async def test_get_user_from_jwt_rejects_expired_token(monkeypatch):
-    monkeypatch.setattr(users_utils, "get_token_from_db", AsyncMock(return_value=("row",)))
     expired = users_utils.create_jwt_token(
         {"sub": "alice", "jti": "d9e3c2b1-0000-4000-8000-000000000000",
          "exp": datetime.now(timezone.utc) - timedelta(minutes=1)}
@@ -71,11 +60,10 @@ async def test_get_user_from_jwt_rejects_expired_token(monkeypatch):
     assert exc_info.value.status_code == 401
 
 
-async def test_get_user_from_jwt_returns_user_for_whitelisted_token(monkeypatch):
+async def test_get_user_from_jwt_returns_user_without_a_whitelist_check(monkeypatch):
+    # access tokens are stateless - no DB check beyond signature/expiry,
+    # even for a jti that was never stored or was since revoked.
     user = _user()
-    monkeypatch.setattr(
-        users_utils, "get_token_from_db", AsyncMock(return_value=("row",))
-    )
     get_user = AsyncMock(return_value=user)
     monkeypatch.setattr(users_utils, "get_user", get_user)
 

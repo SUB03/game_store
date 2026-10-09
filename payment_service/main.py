@@ -1,4 +1,5 @@
 import aiokafka
+import asyncio
 import atexit, time, yaml
 import logging
 import logging.config
@@ -8,23 +9,40 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from payment_service.engine import engine
+from payment_service.reconcile import sweep_once
 from payment_service.router import router
 from payment_service.main_settings import Settings
 
 from typing import Awaitable, Callable
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
+async def _reconcile_loop(producer: aiokafka.AIOKafkaProducer, settings: Settings) -> None:
+    while True:
+        await asyncio.sleep(settings.reconcile_interval_seconds)
+        try:
+            await sweep_once(
+                producer,
+                settings.grant_requests_topic,
+                settings.stuck_grace_seconds,
+                settings.max_stuck_attempts,
+            )
+        except Exception as e:
+            logger.error("stuck-payment reconciliation sweep failed: %s", e)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    settings = Settings()
     producer = aiokafka.AIOKafkaProducer(
-        bootstrap_servers=Settings().kafka_bootstrap_servers
+        bootstrap_servers=settings.kafka_bootstrap_servers
     )
     await producer.start()
     app.state.producer = producer
+    reconcile_task = asyncio.create_task(_reconcile_loop(producer, settings))
     logger.info("payment_service has started")
     yield
     logger.info("payment_service has stopped")
+    reconcile_task.cancel()
     await engine.dispose()
 
 def setup_logging():

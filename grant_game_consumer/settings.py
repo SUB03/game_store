@@ -8,5 +8,6 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = "broker:29092"
     grant_requests_topic: str = "payment.grant-requests"
     grant_results_topic: str = "payment.grant-results"
+    dead_letter_topic: str = "payment.dead-letters"
     users_service_addr: str = "users_service:8003"
     model_config = SettingsConfigDict(extra="ignore", env_file=".env")

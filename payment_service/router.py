@@ -1,6 +1,8 @@
+import ipaddress
 import json
 import logging
 import uuid
+from decimal import Decimal
 from typing import Annotated
 
 from aiokafka import AIOKafkaProducer
@@ -209,18 +211,18 @@ async def checkout(
 
     to_pay: list[int] = []
     granted: list[int] = []
-    total = 0.0
+    total = Decimal("0")
     for appid in payable:
         if appid not in prices:
             await remove_game_from_cart(username=claims.sub, appid=appid)
             continue
-        if float(prices[appid]) <= 0:
+        if prices[appid] <= 0:
             await add_game(username=claims.sub, appid=appid)
             await remove_game_from_cart(username=claims.sub, appid=appid)
             granted.append(appid)
             continue
         to_pay.append(appid)
-        total += float(prices[appid])
+        total += prices[appid]
 
     if not to_pay:
         if not granted:
@@ -248,9 +250,40 @@ async def checkout(
     }
 
 
+def _client_ip(request: Request) -> str:
+    # Caddy is the only thing that can reach payment_service directly, and it
+    # sets X-Forwarded-For; fall back to the socket peer for direct access
+    # (e.g. local dev without the proxy in front).
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
+def _is_from_yookassa(ip: str) -> bool:
+    settings = get_payment_settings()
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(
+        addr in ipaddress.ip_network(cidr)
+        for cidr in settings.yookassa_notification_cidrs
+    )
+
+
 @router.post("/notifications")
 async def notifications(request: Request):
     logger.info("YooKassa notification received")
+
+    settings = get_payment_settings()
+    if settings.verify_webhook_ip and not _is_from_yookassa(_client_ip(request)):
+        logger.warning(
+            "YooKassa notification ignored: unexpected source IP %s",
+            _client_ip(request),
+        )
+        return {"status": "OK"}
+
     try:
         payload = await request.json()
         logger.info(f"yookassa payload: {payload}")
@@ -272,31 +305,28 @@ async def notifications(request: Request):
         return {"status": "OK"}
 
     payment_id = obj.get("id")
-    metadata = obj.get("metadata") or {}
-    username = metadata.get("username")
-    appids_raw = metadata.get("appids")
-
-    if not username or not appids_raw:
+    if not payment_id:
         return {"status": "OK"}
 
-    appids: list[int] = []
-    for raw_appid in appids_raw.split(","):
-        try:
-            appids.append(int(raw_appid))
-        except ValueError:
-            continue
-    if not appids:
+    # The request body is attacker-controlled (the webhook endpoint is
+    # public) - only the payment_id is used to look up what to grant.
+    # username/appids always come from our own `payment_payments` row,
+    # written at checkout time by the authenticated user, never from this
+    # body's metadata. mark_grant_requested also dedupes a webhook YooKassa
+    # redelivers: only the first delivery for a given payment_id is still
+    # `pending` and gets a row back.
+    payment = await mark_grant_requested(payment_id)
+    if payment is None:
         return {"status": "OK"}
 
-    # Dedupe a webhook YooKassa redelivers: only the first delivery for a
-    # given payment_id is still `pending` and gets to publish a grant request.
-    if not await mark_grant_requested(payment_id):
-        return {"status": "OK"}
-
-    message = {"payment_id": payment_id, "username": username, "appids": appids}
+    message = {
+        "payment_id": payment_id,
+        "username": payment.username,
+        "appids": list(payment.appids),
+    }
     producer: AIOKafkaProducer = request.app.state.producer
     await producer.send_and_wait(
-        get_payment_settings().grant_requests_topic,
+        settings.grant_requests_topic,
         json.dumps(message).encode("utf-8"),
     )
 

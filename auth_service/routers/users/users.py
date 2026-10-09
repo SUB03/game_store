@@ -26,6 +26,7 @@ from .users_utils import (
     insert_user,
     get_user_from_jwt,
     get_user,
+    get_token_from_db,
     store_token_in_db,
     delete_token_from_db,
 )
@@ -93,6 +94,15 @@ async def refresh(
         )
 
     payload = Token(**decode_jwt(refresh_token, SECRET_KEY, ALGORITHM))
+
+    if not await get_token_from_db(payload.jti):
+        logger.warning("refresh token is not in whitelist")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     await delete_token_from_db(payload.jti)
 
     jti = uuid.uuid4()

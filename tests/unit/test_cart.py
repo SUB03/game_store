@@ -150,6 +150,7 @@ async def test_get_cart_rejects_expired_token(mocks):
     assert exc_info.value.status_code == 401
 
 
+
 async def test_empty_cart_skips_all_lookups(mocks, fake_engine):
     result = await _get_cart(_access_token(str(uuid.uuid4())))
 

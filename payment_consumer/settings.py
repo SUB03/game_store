@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     # "localhost", which is unreachable from other containers.
     kafka_bootstrap_servers: str = "broker:29092"
     grant_results_topic: str = "payment.grant-results"
+    dead_letter_topic: str = "payment.dead-letters"
     users_service_addr: str = "users_service:8003"
     reconcile_interval_seconds: float = 300
     max_reconcile_attempts: int = 5

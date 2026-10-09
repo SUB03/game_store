@@ -22,9 +22,21 @@ def _message(payment_id="pay-1", username="alice", appids=None, granted=True):
     ).encode()
 
 
+DLQ_TOPIC = "payment.dead-letters"
+
+
 @pytest.fixture
 def stub():
     return AsyncMock()
+
+
+@pytest.fixture
+def producer():
+    return AsyncMock()
+
+
+async def _handle(raw, stub, producer):
+    return await payment_consumer.handle_message(raw, stub, producer, DLQ_TOPIC)
 
 
 @pytest.fixture
@@ -48,10 +60,8 @@ def mocks(monkeypatch):
 # --- handle_message -----------------------------------------------------------
 
 
-async def test_granted_payment_is_captured_and_cart_rows_removed(stub, mocks):
-    await payment_consumer.handle_message(
-        _message(appids=[1, 2], granted=True), stub
-    )
+async def test_granted_payment_is_captured_and_cart_rows_removed(stub, producer, mocks):
+    await _handle(_message(appids=[1, 2], granted=True), stub, producer)
 
     mocks["capture_payment"].assert_awaited_once_with("pay-1")
     mocks["cancel_payment"].assert_not_awaited()
@@ -62,8 +72,8 @@ async def test_granted_payment_is_captured_and_cart_rows_removed(stub, mocks):
     ]
 
 
-async def test_ungranted_payment_is_cancelled_without_touching_the_cart(stub, mocks):
-    await payment_consumer.handle_message(_message(granted=False), stub)
+async def test_ungranted_payment_is_cancelled_without_touching_the_cart(stub, producer, mocks):
+    await _handle(_message(granted=False), stub, producer)
 
     mocks["cancel_payment"].assert_awaited_once_with("pay-1")
     mocks["capture_payment"].assert_not_awaited()
@@ -71,7 +81,7 @@ async def test_ungranted_payment_is_cancelled_without_touching_the_cart(stub, mo
     stub.RemoveGameFromCart.assert_not_awaited()
 
 
-async def test_cart_strip_failure_does_not_raise(stub, mocks):
+async def test_cart_strip_failure_does_not_raise(stub, producer, mocks):
     error = grpc.aio.AioRpcError(
         grpc.StatusCode.UNAVAILABLE,
         initial_metadata=None,
@@ -80,16 +90,16 @@ async def test_cart_strip_failure_does_not_raise(stub, mocks):
     )
     stub.RemoveGameFromCart.side_effect = error
 
-    await payment_consumer.handle_message(_message(appids=[1], granted=True), stub)
+    await _handle(_message(appids=[1], granted=True), stub, producer)
 
     mocks["capture_payment"].assert_awaited_once_with("pay-1")
     mocks["set_status"].assert_awaited_once_with("pay-1", "captured")
 
 
-async def test_capture_failure_marks_granted_pending_capture_for_retry(stub, mocks):
+async def test_capture_failure_marks_granted_pending_capture_for_retry(stub, producer, mocks):
     mocks["capture_payment"].side_effect = RuntimeError("yookassa down")
 
-    await payment_consumer.handle_message(_message(granted=True), stub)
+    await _handle(_message(granted=True), stub, producer)
 
     stub.RemoveGameFromCart.assert_not_awaited()
     mocks["set_status"].assert_awaited_once_with(
@@ -97,30 +107,36 @@ async def test_capture_failure_marks_granted_pending_capture_for_retry(stub, moc
     )
 
 
-async def test_cancel_failure_marks_cancel_failed_for_retry(stub, mocks):
+async def test_cancel_failure_marks_cancel_failed_for_retry(stub, producer, mocks):
     mocks["cancel_payment"].side_effect = RuntimeError("yookassa down")
 
-    await payment_consumer.handle_message(_message(granted=False), stub)
+    await _handle(_message(granted=False), stub, producer)
 
     mocks["set_status"].assert_awaited_once_with(
         "pay-1", "cancel_failed", increment_attempts=True
     )
 
 
-async def test_malformed_json_is_dropped_without_raising(stub, mocks):
-    await payment_consumer.handle_message(b"not json", stub)
+async def test_malformed_json_is_sent_to_dlq(stub, producer, mocks):
+    await _handle(b"not json", stub, producer)
 
     mocks["capture_payment"].assert_not_awaited()
     mocks["cancel_payment"].assert_not_awaited()
+    topic, body = producer.send_and_wait.await_args.args
+    assert topic == DLQ_TOPIC
+    assert json.loads(body)["reason"].startswith("json:")
 
 
-async def test_schema_violation_is_dropped_without_raising(stub, mocks):
+async def test_schema_violation_is_sent_to_dlq(stub, producer, mocks):
     bad = json.dumps({"payment_id": "pay-1", "username": "alice"}).encode()
 
-    await payment_consumer.handle_message(bad, stub)
+    await _handle(bad, stub, producer)
 
     mocks["capture_payment"].assert_not_awaited()
     mocks["cancel_payment"].assert_not_awaited()
+    topic, body = producer.send_and_wait.await_args.args
+    assert topic == DLQ_TOPIC
+    assert json.loads(body)["reason"].startswith("schema:")
 
 
 # --- reconcile_once ------------------------------------------------------------

@@ -153,6 +153,28 @@ export async function callAuth<T>(
 	}
 }
 
+const inFlightRefreshes = new Map<string, Promise<Response>>()
+
+function refreshTokens(refreshToken: string): Promise<Response> {
+	const existing = inFlightRefreshes.get(refreshToken)
+	if (existing) {
+		return existing
+	}
+
+	const promise = fetch(`${AUTH_API}/users/refresh`, {
+		method: "POST",
+		headers: {
+			Cookie: `refresh_token=${refreshToken}`,
+			"Content-Type": "application/json",
+		},
+	}).finally(() => {
+		inFlightRefreshes.delete(refreshToken)
+	})
+
+	inFlightRefreshes.set(refreshToken, promise)
+	return promise
+}
+
 export const authMiddleware = createMiddleware({ type: "function" }).server(
 	async ({ next }) => {
 		const cookieHeader = getRequestHeader("cookie")
@@ -174,13 +196,7 @@ export const authMiddleware = createMiddleware({ type: "function" }).server(
 
 			if (response.status === 401 && refresh_token) {
 				try {
-					const refreshResponse = await fetch(`${AUTH_API}/users/refresh`, {
-						method: "POST",
-						headers: {
-							Cookie: `refresh_token=${refresh_token}`,
-							"Content-Type": "application/json",
-						},
-					})
+					const refreshResponse = await refreshTokens(refresh_token)
 
 					if (refreshResponse.ok) {
 						cookies.push(...refreshResponse.headers.getSetCookie())

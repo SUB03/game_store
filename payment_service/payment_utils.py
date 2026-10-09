@@ -11,6 +11,7 @@ from async_yookassa import YooKassaClient
 from async_yookassa.models.payment import PaymentRequest, Amount, RedirectConfirmationRequest
 
 _payment_settings: PaymentSettings | None = None
+_channel: grpc.aio.Channel | None = None
 
 
 def get_payment_settings() -> PaymentSettings:
@@ -18,6 +19,13 @@ def get_payment_settings() -> PaymentSettings:
     if _payment_settings is None:
         _payment_settings = PaymentSettings()
     return _payment_settings
+
+
+def _get_stub() -> us_pb2_grpc.UserServiceStub:
+    global _channel
+    if _channel is None:
+        _channel = grpc.aio.insecure_channel(get_payment_settings().users_service_addr)
+    return us_pb2_grpc.UserServiceStub(_channel)
 
 
 async def _yookassa_payment(
@@ -66,14 +74,8 @@ async def make_payment_cart(
 
 
 async def has_game(username: str, appid: int):
-    channel = grpc.aio.insecure_channel("users_service:8003")
-    stub = us_pb2_grpc.UserServiceStub(channel)
-
-    request = us_pb2.HasGameRequest(
-        username=username,
-        appid=appid
-    )
-
+    stub = _get_stub()
+    request = us_pb2.HasGameRequest(username=username, appid=appid)
     try:
         response = await stub.HasGame(request)
     except grpc.aio.AioRpcError as e:
@@ -81,21 +83,12 @@ async def has_game(username: str, appid: int):
             status_code=502,
             detail=f"Users service error: {e.code()} - {e.details()}",
         )
-    finally:
-        await channel.close()
-
     return response.result
 
 
 async def add_game(username: str, appid: int):
-    channel = grpc.aio.insecure_channel("users_service:8003")
-    stub = us_pb2_grpc.UserServiceStub(channel)
-
-    request = us_pb2.AddGameToUserRequest(
-        username=username,
-        appid=appid
-    )
-
+    stub = _get_stub()
+    request = us_pb2.AddGameToUserRequest(username=username, appid=appid)
     try:
         response = await stub.AddGameToUser(request)
     except grpc.aio.AioRpcError as e:
@@ -103,18 +96,12 @@ async def add_game(username: str, appid: int):
             status_code=502,
             detail=f"Users service error: {e.code()} - {e.details()}",
         )
-    finally:
-        await channel.close()
-
     return {"message": "added the game", "appid": response.appid}
 
 
 async def get_owned_games(username: str) -> list[int]:
-    channel = grpc.aio.insecure_channel("users_service:8003")
-    stub = us_pb2_grpc.UserServiceStub(channel)
-
+    stub = _get_stub()
     request = us_pb2.GetOwnedGamesRequest(username=username)
-
     try:
         response = await stub.GetOwnedGames(request)
     except grpc.aio.AioRpcError as e:
@@ -122,18 +109,12 @@ async def get_owned_games(username: str) -> list[int]:
             status_code=502,
             detail=f"Users service error: {e.code()} - {e.details()}",
         )
-    finally:
-        await channel.close()
-
     return list(response.appids)
 
 
 async def add_game_to_cart(username: str, appid: int) -> dict:
-    channel = grpc.aio.insecure_channel("users_service:8003")
-    stub = us_pb2_grpc.UserServiceStub(channel)
-
+    stub = _get_stub()
     request = us_pb2.AddGameToCartRequest(username=username, appid=appid)
-
     try:
         response = await stub.AddGameToCart(request)
     except grpc.aio.AioRpcError as e:
@@ -141,18 +122,12 @@ async def add_game_to_cart(username: str, appid: int) -> dict:
             status_code=502,
             detail=f"Users service error: {e.code()} - {e.details()}",
         )
-    finally:
-        await channel.close()
-
     return {"appid": response.appid, "added": response.added}
 
 
 async def remove_game_from_cart(username: str, appid: int) -> dict:
-    channel = grpc.aio.insecure_channel("users_service:8003")
-    stub = us_pb2_grpc.UserServiceStub(channel)
-
+    stub = _get_stub()
     request = us_pb2.RemoveGameFromCartRequest(username=username, appid=appid)
-
     try:
         response = await stub.RemoveGameFromCart(request)
     except grpc.aio.AioRpcError as e:
@@ -160,18 +135,12 @@ async def remove_game_from_cart(username: str, appid: int) -> dict:
             status_code=502,
             detail=f"Users service error: {e.code()} - {e.details()}",
         )
-    finally:
-        await channel.close()
-
     return {"appid": response.appid, "removed": response.removed}
 
 
 async def get_user_cart(username: str) -> list[int]:
-    channel = grpc.aio.insecure_channel("users_service:8003")
-    stub = us_pb2_grpc.UserServiceStub(channel)
-
+    stub = _get_stub()
     request = us_pb2.GetCartRequest(username=username)
-
     try:
         response = await stub.GetCart(request)
     except grpc.aio.AioRpcError as e:
@@ -179,18 +148,12 @@ async def get_user_cart(username: str) -> list[int]:
             status_code=502,
             detail=f"Users service error: {e.code()} - {e.details()}",
         )
-    finally:
-        await channel.close()
-
     return list(response.appids)
 
 
 async def clear_user_cart(username: str) -> int:
-    channel = grpc.aio.insecure_channel("users_service:8003")
-    stub = us_pb2_grpc.UserServiceStub(channel)
-
+    stub = _get_stub()
     request = us_pb2.ClearCartRequest(username=username)
-
     try:
         response = await stub.ClearCart(request)
     except grpc.aio.AioRpcError as e:
@@ -198,9 +161,6 @@ async def clear_user_cart(username: str) -> int:
             status_code=502,
             detail=f"Users service error: {e.code()} - {e.details()}",
         )
-    finally:
-        await channel.close()
-
     return response.removed
 
 

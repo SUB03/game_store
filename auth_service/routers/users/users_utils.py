@@ -77,11 +77,6 @@ async def get_user_from_jwt(token: Annotated[str, Depends(oauth2_scheme)]) -> Us
     if not username:
         logger.warning("missing sub claim in token")
         raise credentials_exeption
-    # checks if this user in whitelist and allowed to auth
-    db_token = await get_token_from_db(payload.jti)
-    if not db_token:
-        logger.warning("token is not in whitelist")
-        raise credentials_exeption
     user = await get_user(username)
     if user is None:
         logger.warning("user does not exist")
