@@ -12,6 +12,7 @@ import Header from "../components/Header"
 import appCss from "../styles.css?url"
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools"
 import { getUsersMe } from "#/server_functions/getUsersMe"
+import { getThemeCookie } from "#/server_functions/theme"
 
 interface MyRouterContext {
 	queryClient: QueryClient
@@ -19,9 +20,9 @@ interface MyRouterContext {
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
 	beforeLoad: async () => {
-		const user = await getUsersMe()
+		const [user, theme] = await Promise.all([getUsersMe(), getThemeCookie()])
 
-		return { user }
+		return { user, theme }
 	},
 	head: () => ({
 		meta: [
@@ -47,8 +48,15 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+	// Read from the `theme` cookie (set by ThemeToggle) so the server renders
+	// the right theme on the very first byte - no flash-of-wrong-theme on
+	// load, unlike reading from localStorage (which the server can't see).
+	// `null` means a first-ever visit with no cookie yet; ThemeToggle detects
+	// the OS preference client-side once and persists it for every load after.
+	const theme = Route.useRouteContext().theme ?? "light"
+
 	return (
-		<html lang="en" suppressHydrationWarning>
+		<html lang="en" data-theme={theme} style={{ colorScheme: theme }}>
 			<head>
 				<HeadContent />
 			</head>
