@@ -41,6 +41,7 @@ Run the Alembic migrations:
 ```bash
 alembic -c store_service/alembic.ini upgrade head
 alembic -c auth_service/alembic.ini upgrade head
+alembic -c users_service/alembic.ini upgrade head
 ```
 
 If the dataset is available, the tables will also be populated.
@@ -93,8 +94,8 @@ pytest
   ```
 
   The tables used by the tests (`auth_users`, `auth_token_whitelist`,
-  `store_games`, `store_tags`, `users_game_ownership`) are truncated around
-  every test.
+  `store_games`, `store_tags`, `users_game_ownership`, `users_cart`) are
+  truncated around every test.
 
 ## Coverage
 
@@ -134,28 +135,3 @@ Alembic migrations run as subprocesses and are intentionally not measured.
 
    **Required secret:** add `DEPLOY_ENV` under *Settings -> Secrets and
    variables -> Actions* with the full contents of your `.env` file.
-
-   **One-time note:** stop any manually started stack first
-   (`docker compose ... down`) — Compose `container_name`s and host ports
-   collide otherwise. The CI checkout also gets its own project name, so a
-   fresh `pgdata` volume is possible; the migration step creates the schema.
-
-### Registering the laptop as a self-hosted runner
-
-1. On GitHub: *Settings -> Actions -> Runners -> New self-hosted runner*,
-   pick Linux, and follow the download steps.
-2. Configure it with the `laptop` label — the deploy job targets this label:
-
-   ```bash
-   ./config.sh --url https://github.com/SUB03/something_with_postgres --token <TOKEN> --labels laptop --name laptop
-   ```
-
-3. Install and start it as a service so it survives reboots:
-
-   ```bash
-   sudo ./svc.sh install
-   sudo ./svc.sh start
-   ```
-
-4. Keep Docker running on the laptop — the deploy step uses it; checkout and
-   compose files live in the runner `_work` directory.

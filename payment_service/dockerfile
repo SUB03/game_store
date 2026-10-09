@@ -2,11 +2,13 @@ FROM python:3.14
 
 WORKDIR /src
 
-COPY ./payment_service/requirements.txt /src/requirements.txt
+COPY requirements.txt /src/requirements.txt
+
 RUN pip install --no-cache-dir --upgrade pip \
 && pip install --no-cache-dir -r /src/requirements.txt
 
 COPY ./payment_service /src/payment_service
+COPY logger_config.yml /src/payment_service/logger_config.yml
 COPY .env /src/payment_service
 
 # installs protos
@@ -19,4 +21,4 @@ WORKDIR /src
 
 EXPOSE 8002
 
-CMD ["python", "payment_service/main.py"]
+CMD ["fastapi", "run", "payment_service/main.py", "--port", "8002"]

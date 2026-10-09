@@ -27,10 +27,12 @@ DEFAULT_URL = f"postgresql+psycopg://postgres:postgres@127.0.0.1:{PORT}/{DB_NAME
 
 TABLES = [
     "users_game_ownership",
+    "users_cart",
     "auth_token_whitelist",
     "auth_users",
     "store_tags",
     "store_games",
+    "payment_payments",
 ]
 
 
@@ -106,7 +108,7 @@ def _alembic(args: list[str], cwd: Path, env: dict) -> None:
 
 @pytest.fixture(scope="session")
 def db(pg_url):
-    """Test database with the schema of all three services migrated."""
+    """Test database with the schema of all four services migrated."""
     env = {
         **os.environ,
         "SQLALCHEMY_URL": pg_url,
@@ -121,6 +123,7 @@ def db(pg_url):
     _alembic(["-c", "auth_service/alembic.ini", "upgrade", "head"], ROOT, env)
     _alembic(["-c", "store_service/alembic.ini", "upgrade", "head"], ROOT, env)
     _alembic(["-c", "alembic.ini", "upgrade", "head"], ROOT / "users_service", env)
+    _alembic(["-c", "alembic.ini", "upgrade", "head"], ROOT / "payment_service", env)
 
     yield create_async_engine(pg_url)
 

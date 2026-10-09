@@ -1,14 +1,15 @@
 import logging
+
+from fastapi import HTTPException, routing, status, Cookie, Query, Path
+from sqlalchemy import select, func
 from typing import Annotated
 
-from fastapi import HTTPException, routing, Depends, status, Request, Cookie, Header, Query, Path
-from sqlalchemy import select, func
-
-from store_service.schemas.games import Price
 from store_service.engine import engine
 from store_service.models.models import games_table, tags_table
-from store_service.routers.store_utils import get_price, has_game, make_payment, add_game, get_owned_games
-from store_service.schemas.games import PurchaseGame
+from store_service.routers.store_utils import (
+    get_price,
+    get_owned_games,
+)
 from store_service.utils.jwt import decode_jwt
 from store_service.schemas.token import Token
 from store_service.utils.tag_groups import _TAG_TO_GROUP, TAG_GROUPS
@@ -160,146 +161,3 @@ async def owned_games(access_token: Annotated[str | None, Cookie()] = None):
         rows = result.mappings().all()
 
     return {"results": rows}
-
-
-@router.post("/purchase_game")
-async def purchase_game(
-    purchase: PurchaseGame,
-    csrf: Annotated[str | None, Header(alias="CSRF")] = None,
-    access_token: Annotated[str | None, Cookie()] = None,
-):
-    if not access_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="could not validate credentials"
-        )
-    claims = Token(**decode_jwt(access_token))
-    if not csrf or csrf != str(claims.jti):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="could not validate credentials"
-        )
-
-    result = await has_game(username=claims.sub, appid=purchase.appid)
-    if result:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="already owned by the user"
-        )
-
-    game_price = await get_price(purchase.appid)
-    if not game_price:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="appid is not found"
-        )
-    game_price = Price(**game_price._asdict())
-    if game_price.price > 0:
-        response = await make_payment(username=claims.sub, appid=purchase.appid, price=str(game_price.price))
-        return {
-            "payment_id": response.payment_id,
-            "confirmation_url": response.confirmation_url,
-        }
-    else:
-        result = await add_game(username=claims.sub, appid=purchase.appid)
-        return result
-    
-
-@router.post("/notifications")
-async def notifications(request: Request):
-    """YooKassa webhook: grant the game when a payment succeeds.
-
-    Always answers 200 fast (YooKassa retries on non-2xx / timeouts).
-    Ownership is idempotent - re-delivered webhooks must not fail.
-    """
-    logger.info("YooKassa notification received")
-    try:
-        payload = await request.json()
-    except Exception:
-        logger.warning(
-            "YooKassa notification ignored: request body is not valid JSON",
-            exc_info=True,
-        )
-        return {"status": "OK"}
-
-    if not isinstance(payload, dict):
-        logger.warning(
-            "YooKassa notification ignored: JSON payload is not an object",
-            extra={"payload_type": type(payload).__name__},
-        )
-        return {"status": "OK"}
-
-    event = payload.get("event")
-    obj = payload.get("object")
-    payment_id = obj.get("id") if isinstance(obj, dict) else None
-    log_context = {
-        "event": event,
-        "payment_id": payment_id,
-    }
-
-    if event != "payment.succeeded":
-        logger.info(
-            "YooKassa notification ignored: event is not payment.succeeded",
-            extra=log_context,
-        )
-        return {"status": "OK"}
-
-    metadata = obj.get("metadata") if isinstance(obj, dict) else None
-    metadata = metadata if isinstance(metadata, dict) else {}
-    username = metadata.get("username")
-    appid = metadata.get("appid")
-
-    if not username or appid is None:
-        logger.warning(
-            "Succeeded payment ignored: username or appid metadata is missing",
-            extra={**log_context, "username": username, "appid": appid},
-        )
-        return {"status": "OK"}
-
-    try:
-        appid = int(appid)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Succeeded payment ignored: appid metadata is not an integer",
-            extra={**log_context, "username": username, "raw_appid": repr(appid)[:200]},
-        )
-        return {"status": "OK"}
-
-    ownership_context = {**log_context, "username": username, "appid": appid}
-    logger.info(
-        "Checking ownership for succeeded payment",
-        extra=ownership_context,
-    )
-    try:
-        already_owned = await has_game(username=username, appid=appid)
-    except Exception as exc:
-        logger.exception(
-            "Failed to check ownership for succeeded payment",
-            extra={**ownership_context, "error_type": type(exc).__name__},
-        )
-        raise
-
-    if already_owned:
-        logger.info(
-            "Game is already owned; skipping grant for succeeded payment",
-            extra={**ownership_context, "already_owned": True},
-        )
-        return {"status": "OK"}
-
-    try:
-        result = await add_game(username=username, appid=appid)
-    except Exception as exc:
-        logger.exception(
-            "Failed to add game for succeeded payment",
-            extra={**ownership_context, "error_type": type(exc).__name__},
-        )
-        raise
-
-    logger.info(
-        "Successfully added game for succeeded payment",
-        extra={
-            **ownership_context,
-            "result_appid": result.get("appid") if isinstance(result, dict) else None,
-        },
-    )
-    return {"status": "OK"}

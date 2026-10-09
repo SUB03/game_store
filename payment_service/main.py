@@ -1,64 +1,108 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+import aiokafka
+import asyncio
+import atexit, time, yaml
+import logging
+import logging.config
+import logging.handlers
+from contextlib import asynccontextmanager
 
-import grpc, asyncio
-import payment_proto.payment_service_pb2 as payment_service_pb2
-import payment_proto.payment_service_pb2_grpc as payment_service_pb2_grpc
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from payment_service.engine import engine
+from payment_service.reconcile import sweep_once
+from payment_service.router import router
+from payment_service.main_settings import Settings
 
-from async_yookassa import YooKassaClient
-from async_yookassa.models.payment import PaymentRequest, Amount, RedirectConfirmationRequest
+from typing import Awaitable, Callable
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
-class Settings(BaseSettings):
-    shopid: str
-    ukass_api_key: str = Field(alias="UKASS_API_KEY")
-    frontend_url: str = Field(alias="FRONTEND_URL")
-    model_config = SettingsConfigDict(extra="ignore", env_file=".env")
-
-class PaymentServiceServicer(payment_service_pb2_grpc.PaymentServiceServicer):
-    def __init__(self, settings: Settings):
-        self.settings = settings
-
-    async def MakePayment(
-            self,
-            request: payment_service_pb2.MakePaymentRequest,
-            context: grpc.aio.ServicerContext
-    ) -> payment_service_pb2.MakePaymentResponse:
-        
-        async with YooKassaClient(
-            account_id=self.settings.shopid,
-            secret_key=self.settings.ukass_api_key
-        ) as client:
-            yookassa_request = PaymentRequest(
-                amount=Amount(value=request.price, currency="RUB"),
-                description=f"Purchase of app {request.appid} by {request.username}",
-                metadata={
-                    "username": request.username,
-                    "appid": str(request.appid),
-                },
-                confirmation=RedirectConfirmationRequest(
-                    type="redirect",
-                    return_url=f"{self.settings.frontend_url}/app/{request.appid}"
-                )
+async def _reconcile_loop(producer: aiokafka.AIOKafkaProducer, settings: Settings) -> None:
+    while True:
+        await asyncio.sleep(settings.reconcile_interval_seconds)
+        try:
+            await sweep_once(
+                producer,
+                settings.grant_requests_topic,
+                settings.stuck_grace_seconds,
+                settings.max_stuck_attempts,
             )
+        except Exception as e:
+            logger.error("stuck-payment reconciliation sweep failed: %s", e)
 
-            payment = await client.payment.create(yookassa_request)
-            
-
-        return payment_service_pb2.MakePaymentResponse(
-            payment_id=payment.id,
-            confirmation_url=payment.confirmation.confirmation_url
-        )
-
-
-async def serve():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    setup_logging()
     settings = Settings()
+    producer = aiokafka.AIOKafkaProducer(
+        bootstrap_servers=settings.kafka_bootstrap_servers
+    )
+    await producer.start()
+    app.state.producer = producer
+    reconcile_task = asyncio.create_task(_reconcile_loop(producer, settings))
+    logger.info("payment_service has started")
+    yield
+    logger.info("payment_service has stopped")
+    reconcile_task.cancel()
+    await engine.dispose()
 
-    server = grpc.aio.server()
-    payment_service_pb2_grpc.add_PaymentServiceServicer_to_server(PaymentServiceServicer(settings), server)
-    server.add_insecure_port('[::]:8002')
+def setup_logging():
+    with open("payment_service/logger_config.yml") as f:
+        config = yaml.safe_load(f)
+    logging.config.dictConfig(config)
+    queue_handler: logging.handlers.QueueHandler | None = logging.getHandlerByName("queue_handler")
+    if queue_handler is not None:
+        queue_handler.listener.start()
+        atexit.register(queue_handler.listener.stop)
 
-    await server.start()
-    await server.wait_for_termination()
+REQUEST_COUNT = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status"]
+)
 
-if __name__ == "__main__":
-    asyncio.run(serve())
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds",
+    "Request latency",
+    ["endpoint"]
+)
+
+logger = logging.getLogger("payment_service")
+
+api = FastAPI(lifespan=lifespan)
+api.include_router(router)
+
+origins = [
+    "http://localhost",
+    "http://localhost:3001",
+]
+
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@api.middleware("http")
+async def metrics_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]):
+    start = time.time()
+    response = await call_next(request)
+    duration = time.time() - start
+
+    REQUEST_COUNT.labels(
+        request.method,
+        request.url.path,
+        response.status_code
+    ).inc()
+
+    REQUEST_LATENCY.labels(request.url.path).observe(duration)
+    return response
+
+@api.get('/')
+async def index():
+    return {"message": "payment service index"}
+
+@api.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

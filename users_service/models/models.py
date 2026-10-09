@@ -33,3 +33,10 @@ games_ownership = Table(
     Column("username", Text, ForeignKey("auth_users.username"), primary_key=True),
     Column("appid", BigInteger, ForeignKey("store_games.appid"), primary_key=True),
 )
+
+users_cart = Table(
+    "users_cart",
+    metadata,
+    Column("username", Text, ForeignKey("auth_users.username"), primary_key=True),
+    Column("appid", BigInteger, ForeignKey("store_games.appid"), primary_key=True),
+)

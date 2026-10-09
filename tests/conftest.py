@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 for extra in (
     ROOT,  # `auth_service`, `store_service`, `payment_service`, `users_service` packages
     ROOT / "users_service",  # users_service/main.py does `from models import ...`
-    ROOT / "shared" / "protobufs" / "src",  # `users_proto`, `payment_proto`
+    ROOT / "shared" / "protobufs" / "src",  # `users_proto`
 ):
     path = str(extra)
     if path not in sys.path:
@@ -37,3 +37,6 @@ os.environ.setdefault("FRONTEND_URL", "http://localhost:3001")
 # payment_service settings (only used when constructing its Settings)
 os.environ.setdefault("SHOPID", "1")
 os.environ.setdefault("UKASS_API_KEY", "test-api-key")
+# tests never run from a YooKassa IP; the webhook IP allowlist is tested
+# separately via explicit settings overrides.
+os.environ.setdefault("VERIFY_WEBHOOK_IP", "false")

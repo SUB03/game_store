@@ -9,7 +9,7 @@ formatters:
 handlers:
   stderr:
     class: logging.StreamHandler
-    level: "WARNING"
+    level: "INFO"
     formatter: simple
     stream: "ext://sys.stderr"
   # file:
@@ -27,6 +27,11 @@ handlers:
     handlers: [stderr, victorialogs]
     respect_handler_level: true
 loggers:
-  root:
+  auth_service:
     level: DEBUG
     handlers: [queue_handler]
+    propagate: false
+
+root:
+  level: DEBUG
+  handlers: [queue_handler]

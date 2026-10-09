@@ -1,5 +1,5 @@
 import type { Game } from "#/types"
-import { STORE_API, store_api } from "#/utils/api"
+import { store_api } from "#/utils/api"
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query"
 import { createServerFn } from "@tanstack/react-start"
 import z from "zod"
@@ -26,7 +26,6 @@ type GamesFilters = Omit<GamesParams, "offset">
 export const fetchGames = createServerFn({ method: "GET" })
 	.validator(gamesParamsSchema)
 	.handler(async ({ data }) => {
-		console.log(store_api, STORE_API)
 		try {
 			const response = await store_api.get<GamesRespose>("store/games", {
 				params: data,

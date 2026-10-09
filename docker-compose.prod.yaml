@@ -19,7 +19,15 @@ services:
         restart: unless-stopped
         networks:
             - app-net
-    
+    grant_game_consumer:
+        restart: unless-stopped
+        networks:
+            - app-net
+    payment_consumer:
+        restart: unless-stopped
+        networks:
+            - app-net
+
     victorialogs:
         restart: unless-stopped
         networks:
@@ -36,6 +44,10 @@ services:
             - app-net
     
     grafana:
+        restart: unless-stopped
+        networks:
+            - app-net
+    broker:
         restart: unless-stopped
         networks:
             - app-net

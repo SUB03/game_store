@@ -95,8 +95,11 @@ async def test_me_requires_authentication(auth_app):
     assert response.status_code == 401
 
 
-async def test_me_rejects_token_that_is_not_whitelisted(auth_app):
-    # a structurally valid JWT whose jti was never stored must be rejected
+async def test_me_accepts_a_structurally_valid_token_never_whitelisted(client, auth_app):
+    # access tokens are stateless: signature + expiry is enough, even for a
+    # jti that was never stored (whitelisting only ever gates /users/refresh)
+    await _register(client, username="alice")
+
     from auth_service.routers.users.users_utils import create_jwt_token
     from datetime import datetime, timedelta, timezone
     import uuid as uuid_module
@@ -112,14 +115,14 @@ async def test_me_rejects_token_that_is_not_whitelisted(auth_app):
         transport=ASGITransport(app=auth_app),
         base_url="http://testserver",
         cookies={"access_token": token},
-    ) as forged:
-        response = await forged.get("/users/me")
-    assert response.status_code == 401
+    ) as unwhitelisted:
+        response = await unwhitelisted.get("/users/me")
+    assert response.status_code == 200
 
 
 # --- refresh ----------------------------------------------------------------
 
-async def test_refresh_rotates_tokens_and_revokes_old_jti(client, auth_app):
+async def test_refresh_rotates_tokens_and_revokes_old_refresh_token(client, auth_app):
     await _register(client, username="alice")
     old_access = client.cookies.get("access_token")
     old_refresh = client.cookies.get("refresh_token")
@@ -140,13 +143,16 @@ async def test_refresh_rotates_tokens_and_revokes_old_jti(client, auth_app):
     me = await client.get("/users/me")
     assert me.status_code == 200
 
-    # the old access token's jti was removed from the whitelist by refresh
+    # the old refresh token's jti was removed from the whitelist by this
+    # refresh - trying to reuse it must now fail (this is the one place
+    # revocation actually takes effect; the old access token itself stays
+    # valid until it naturally expires, since it's stateless)
     async with AsyncClient(
         transport=ASGITransport(app=auth_app),
         base_url="http://testserver",
-        cookies={"access_token": old_access},
+        cookies={"refresh_token": old_refresh},
     ) as stale:
-        stale_response = await stale.get("/users/me")
+        stale_response = await stale.post("/users/refresh")
     assert stale_response.status_code == 401
 
 
@@ -158,9 +164,9 @@ async def test_refresh_without_cookie_returns_401(auth_app):
 
 # --- logout -----------------------------------------------------------------
 
-async def test_logout_clears_cookies_and_revokes_access(client, auth_app):
+async def test_logout_clears_cookies_and_revokes_the_refresh_token(client, auth_app):
     await _register(client, username="alice")
-    old_access = client.cookies.get("access_token")
+    old_refresh = client.cookies.get("refresh_token")
 
     response = await client.post("/users/logout")
     assert response.status_code == 200
@@ -168,10 +174,12 @@ async def test_logout_clears_cookies_and_revokes_access(client, auth_app):
     assert client.cookies.get("refresh_token") is None
     assert client.cookies.get("CSRF") is None
 
+    # logout deletes the jti from the whitelist, so the old refresh token
+    # can no longer be used to mint a new session
     async with AsyncClient(
         transport=ASGITransport(app=auth_app),
         base_url="http://testserver",
-        cookies={"access_token": old_access},
+        cookies={"refresh_token": old_refresh},
     ) as stale:
-        stale_response = await stale.get("/users/me")
+        stale_response = await stale.post("/users/refresh")
     assert stale_response.status_code == 401

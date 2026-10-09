@@ -29,7 +29,7 @@ jobs:
         run: pytest tests/unit -q
 
       # starts a throwaway postgres:18 container on 127.0.0.1:5433,
-      # applies the alembic migrations of all three services, then removes it;
+      # applies the alembic migrations of all four services, then removes it;
       # --cov-append merges the unit-test data so coverage.xml covers both suites
       - name: Integration tests
         run: pytest tests/integration -q --cov-append
@@ -74,6 +74,7 @@ jobs:
           docker compose -f docker-compose.yaml -f docker-compose.prod.yaml run --rm auth_service alembic -c auth_service/alembic.ini upgrade head
           docker compose -f docker-compose.yaml -f docker-compose.prod.yaml run --rm store_service alembic -c store_service/alembic.ini upgrade head
           docker compose -f docker-compose.yaml -f docker-compose.prod.yaml run --rm users_service alembic -c users_service/alembic.ini upgrade head
+          docker compose -f docker-compose.yaml -f docker-compose.prod.yaml run --rm payment_service alembic -c payment_service/alembic.ini upgrade head
 
       - name: Deploy the stack
         run: docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d --build
