@@ -60,17 +60,23 @@ async def test_has_game_is_false_for_other_game(servicer, context, seed_user, se
     assert response.result is False
 
 
-async def test_duplicate_ownership_is_rejected_by_db(servicer, context, seed_user, seed_game):
+async def test_duplicate_ownership_is_idempotent(servicer, context, seed_user, seed_game):
     username = await seed_user(username="alice")
     appid = await seed_game(name="Owned Game")
 
-    await servicer.AddGameToUser(
+    first = await servicer.AddGameToUser(
         AddGameToUserRequest(username=username, appid=appid), context
     )
-    with pytest.raises(IntegrityError):
-        await servicer.AddGameToUser(
-            AddGameToUserRequest(username=username, appid=appid), context
-        )
+    second = await servicer.AddGameToUser(
+        AddGameToUserRequest(username=username, appid=appid), context
+    )
+
+    assert first.appid == appid
+    assert second.appid == appid
+    response = await servicer.HasGame(
+        HasGameRequest(username=username, appid=appid), context
+    )
+    assert response.result is True
 
 
 async def test_ownership_requires_existing_user_and_game(servicer, context, seed_user, seed_game):
